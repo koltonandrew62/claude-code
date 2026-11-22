@@ -1,0 +1,9 @@
+{
+  "name": "wren",
+  "params": 2615424,
+  "val_loss": 2.1369,
+  "steps": 3571,
+  "minutes": 30.0,
+  "device": "cpu",
+  "trained_on": "2026-11-22"
+}
