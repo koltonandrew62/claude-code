@@ -1,0 +1,8 @@
+{
+  "name": "catalyst",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Event radar and screener: M&A, FDA, earnings, news sentiment and a corporate-jet tracker",
+  "scripts": { "start": "node server.js", "test": "node --test" },
+  "engines": { "node": ">=20" }
+}
