@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const S = require('../lib/signals');
-const { parseRss, shortName } = require('../lib/sources');
+const { parseRss, shortName, normTradier, normAlphaVantage } = require('../lib/sources');
 
 const NOW = Date.parse('2026-11-24T15:00:00Z');
 const filing = (form, date, extra = {}) => ({ form, date, items: '', file: '', desc: '', url: 'https://example.test', ...extra });
@@ -60,4 +60,36 @@ test('source helpers clean company names and parse RSS', () => {
   assert.strictEqual(shortName('Eli Lilly & Co'), 'Eli Lilly');
   const items = parseRss('<rss><item><title>Acme &amp; Co soars - Wire</title><link>https://example.test/a</link><pubDate>Mon, 23 Nov 2026 10:00:00 GMT</pubDate><source url="https://example.test">Wire</source></item></rss>');
   assert.deepStrictEqual(items.map(i => [i.title, i.publisher]), [['Acme & Co soars', 'Wire']]);
+});
+
+test('forecast leans up in an uptrend, down in a downtrend, and abstains without history', () => {
+  const series = drift => {
+    let p = 100;
+    return Array.from({ length: 400 }, (_, i) => { p *= 1 + drift + 0.01 * Math.sin(i * 1.7); return { d: S.iso(NOW - (400 - i) * 864e5), o: p, h: p, l: p, c: p, v: 1e6 }; });
+  };
+  const up = S.forecast(series(0.002), null), down = S.forecast(series(-0.002), null);
+  assert.ok(up.pUp > 0.55 && up.verdict === 'Up' && up.high > up.low);
+  assert.ok(down.pUp < 0.45 && down.verdict === 'Down');
+  assert.strictEqual(S.forecast(series(0.002).slice(0, 100), null), null);
+});
+
+test('options marking: a bullish forecast turns the at-the-money call green and put red; no edge leaves both red', () => {
+  const contracts = [90, 100, 110].flatMap(strike => ['C', 'P'].map(type => ({ exp: '2026-12-18', type, strike, bid: 1, ask: 1.2, last: 1.1, iv: 0.4, delta: 0.5, vol: 10, oi: 100 })));
+  const base = { last: 100, horizon: 5, dailySigma: 0.02 };
+  const bull = S.markOptions(contracts, { ...base, expRet: 0.03 }, '2026-12-18', NOW).rows.find(r => r.strike === 100);
+  assert.ok(bull.call.up && bull.call.change > 0 && !bull.put.up);
+  assert.strictEqual(bull.call.mid, 1.1);
+  const flat = S.markOptions(contracts, { ...base, expRet: 0 }, '2026-12-18', NOW);
+  const atm = flat.rows.find(r => r.strike === 100);
+  assert.ok(!atm.call.up && !atm.put.up); // implied vol above realized: time decay wins on both sides
+  assert.deepStrictEqual(flat.rows.map(r => r.strike), [90, 100, 110]);
+  assert.ok(Math.abs(S.bs(100, 100, 1, 0.2, true) - 7.966) < 0.01); // textbook Black-Scholes value at zero rates
+});
+
+test('option chain normalizers accept Tradier and Alpha Vantage payloads', () => {
+  const t = normTradier({ options: { option: [{ expiration_date: '2026-12-18', option_type: 'put', strike: 16, bid: 0.1, ask: 0.2, last: null, volume: 3, open_interest: 10, greeks: { delta: -0.2, mid_iv: 0.38 } }] } });
+  assert.deepStrictEqual(t[0], { exp: '2026-12-18', type: 'P', strike: 16, bid: 0.1, ask: 0.2, last: null, iv: 0.38, delta: -0.2, vol: 3, oi: 10 });
+  const a = normAlphaVantage({ data: [{ expiration: '2026-12-18', strike: '50.00', type: 'call', last: '1.10', mark: '1.15', bid: '1.10', ask: '1.20', volume: '5', open_interest: '7', implied_volatility: '0.31', delta: '0.52' }] });
+  assert.deepStrictEqual(a[0], { exp: '2026-12-18', type: 'C', strike: 50, bid: 1.1, ask: 1.2, last: 1.1, iv: 0.31, delta: 0.52, vol: 5, oi: 7 });
+  assert.throws(() => normAlphaVantage({ Information: 'rate limit reached' }), /rate limit/);
 });

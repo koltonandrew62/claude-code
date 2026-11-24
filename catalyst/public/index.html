@@ -20,7 +20,7 @@ h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}h2{font-size:15px}h3{font-s
 header{position:sticky;top:0;z-index:500;display:flex;align-items:center;gap:18px;padding:12px 22px;background:rgba(0,0,0,.72);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.22em;font-size:13px}
 .brand svg{width:22px;height:22px}
-#search{flex:1;max-width:340px}
+#search{flex:1;max-width:240px}
 #q{width:100%;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;outline:0;transition:border-color .15s,box-shadow .15s}
 #q:focus,select:focus,textarea:focus,input[type=number]:focus,#tagform input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(200,255,62,.12)}
 #q::placeholder,textarea::placeholder,input::placeholder{color:var(--ink3)}
@@ -110,15 +110,26 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:rgb
 .fil{display:grid;grid-template-columns:86px 96px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}.fil:last-child{border:0}.fil span:first-child{color:var(--ink3)}.fil span:last-child{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .note{color:var(--ink3);font-size:11.5px;line-height:1.5;margin-top:10px}
 #tip{position:fixed;z-index:2000;pointer-events:none;background:#16161a;border:1px solid var(--line2);border-radius:9px;padding:7px 10px;font-size:12px;box-shadow:0 8px 30px #000;opacity:0;transition:opacity .1s;max-width:280px}#tip.on{opacity:1}
-@media(max-width:1000px){header{flex-wrap:wrap;gap:10px;padding:10px 14px}#search{order:3;max-width:none;flex-basis:100%}#tabs{overflow-x:auto;max-width:100%}#sources span{display:none}main{padding:14px}#v-screener.on,#v-jets.on{grid-template-columns:1fr}#map{height:56vh}#jetside{max-height:none}.tiles{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.hero{grid-template-columns:1fr}.row{grid-template-columns:70px 56px 1fr}.row .tag{display:none}#drawer{padding:14px}}
+.fch{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.call{font-size:20px;font-weight:700;padding:8px 16px;border-radius:12px;border:1px solid var(--line2);white-space:nowrap}.call.up{border-color:var(--up);background:rgba(12,163,12,.12)}.call.dn{border-color:var(--down);background:rgba(230,103,103,.12)}
+.fac{display:grid;grid-template-columns:200px 1fr 130px;gap:12px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:13px}.fac .dv{margin:0}
+.wide{max-width:1180px}.wide .card{padding:16px}#optform{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 16px}#optform input{width:170px;margin:0;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;outline:0;text-transform:uppercase}#optform button[type=submit]{background:var(--accent);color:#000;font-weight:650;padding:9px 18px;border-radius:10px}
+.exps{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px}
+.chainwrap{max-height:68vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.chain{min-width:720px;font-size:13px}.chain th{background:#0b0b0e;cursor:default;text-align:right;z-index:2}.chain th.k,.chain td.k{text-align:center;font-weight:650;background:#0b0b0e;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.chain td{text-align:right;padding:7px 10px;white-space:nowrap}.chain tbody tr{cursor:default}.chain td.g{background:rgba(12,163,12,.16)}.chain td.r{background:rgba(230,103,103,.13)}.chain td.g i{color:var(--up);font-style:normal}.chain td.r i{color:var(--down);font-style:normal}.chain td.o{font-weight:600}
+.chain tr.spot td{text-align:center;background:var(--accent);color:#000;font-weight:650;padding:3px;font-size:12px}
+.prov{padding:14px 0;border-top:1px solid var(--line)}.prov:first-of-type{border-top:0}.prov h4{margin:0 0 3px;font-size:14px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}.prov h4 a{font-size:12px;font-weight:400;color:var(--accent);white-space:nowrap}.prov .rowi{display:flex;gap:8px;margin-top:8px;align-items:center}.prov input[type=text],.prov input[type=password]{flex:1;background:#000;border:1px solid var(--line);border-radius:9px;padding:8px 10px;outline:0;min-width:0}.prov .res{font-size:12px;margin-top:6px;min-height:16px}
+.links a{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.links a:first-child{border:0}.links a span{color:var(--ink3);font-size:12px;text-align:right}
+@media(max-width:1000px){.fac{grid-template-columns:1fr 90px}.fac .sub{display:none}header{flex-wrap:wrap;gap:10px;padding:10px 14px}#search{order:3;max-width:none;flex-basis:100%}#tabs{overflow-x:auto;max-width:100%}#sources span{display:none}main{padding:14px}#v-screener.on,#v-jets.on{grid-template-columns:1fr}#map{height:56vh}#jetside{max-height:none}.tiles{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.hero{grid-template-columns:1fr}.row{grid-template-columns:70px 56px 1fr}.row .tag{display:none}#drawer{padding:14px}}
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="#2b2b33"/><circle cx="12" cy="12" r="6" stroke="#6c6c78"/><path d="M12 12 19.5 6" stroke="#c8ff3e" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#c8ff3e"/></svg>CATALYST</div>
   <form id="search"><input id="q" placeholder="Analyze any ticker…   press /" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
-  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
+  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
   <div id="sources"></div>
+  <button class="ghost" data-settings>API keys</button>
 </header>
 <main>
   <section id="v-screener" class="view on">
@@ -137,6 +148,7 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:rgb
       <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
     </div>
   </section>
+  <section id="v-options" class="view"><div class="feed wide" id="options"></div></section>
   <section id="v-calendar" class="view"><div class="feed" id="calendar"></div></section>
   <section id="v-signals" class="view"><div class="feed" id="signals"></div></section>
   <section id="v-jets" class="view"><div id="map"></div><aside id="jetside"></aside></section>
@@ -347,13 +359,14 @@ function renderDetail(r) {
   <div class="card hero">${ring(s.overall)}<div><div class="eyebrow">Catalyst score · led by ${esc(r.driver)}</div><ul class="thesis">${r.thesis.map(t => `<li><i style="background:${CAT_COLOR[t.cat]}"></i><span>${esc(t.text)}</span></li>`).join('') || '<li>No notable signals right now.</li>'}</ul></div></div>
   <div class="tiles">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">News sentiment</span><b>${nw.score > 0 ? '+' : ''}${nw.score}</b><em>${nw.label} · ${nw.count} headlines</em>${sentBar(nw.score)}</div></div>
   <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:rgba(255,255,255,.25);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
+  ${forecastCard(r.forecast)}
   <div class="card"><h3>Key numbers</h3><div class="stats">${stat('Market cap', fMoney(f.mcap) + (f.mcapStale ? ' *' : ''))}${stat('Revenue (12 mo)', fMoney(f.revTTM))}${stat('Revenue growth', fPct(f.revGrowth))}${stat('EV / sales', f.evSales != null ? f.evSales.toFixed(1) + 'x' : '—')}${stat('Net cash', fMoney(f.netCash))}${stat('Cash runway', f.runwayMonths ? Math.round(f.runwayMonths) + ' months' : 'Profitable / n.a.')}${stat('52-week range', p?.pos52 != null ? Math.round(p.pos52 * 100) + '% of the way up' : '—')}${stat('Volume vs normal', p?.volRatio ? p.volRatio.toFixed(2) + 'x' : '—')}</div></div>
   <div class="card"><h3><span><i class="dot" style="background:var(--ma)"></i>M&A signals</span><span class="tag">${esc(r.merger.level)}</span></h3>${evi(r.merger.evidence)}</div>
   ${r.fda.applicable ? `<div class="card"><h3><span><i class="dot" style="background:var(--fda)"></i>FDA & trial catalysts</span><span class="tag">${esc(r.fda.level)}</span></h3>
     ${r.fda.catalysts.length ? `<div style="overflow-x:auto"><table class="fdat"><thead><tr><th>Program</th><th>Stage</th><th>Date</th><th>Approval odds</th></tr></thead><tbody>${r.fda.catalysts.map(c => `<tr><td><a href="${href(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a><div class="sub">${esc(c.kind)}</div></td><td>${c.phase === 'filed' ? 'FDA review' : 'Phase ' + c.phase}</td><td style="white-space:nowrap">${fDate(c.date, 1)}<div class="sub">${c.days < 0 ? 'data due' : (c.estimated ? 'est. · ' : '') + 'in ' + c.days + 'd'}</div></td><td><div class="odds"><span>${Math.round(c.odds * 100)}%</span><div class="meter"><i style="width:${c.odds * 100}%;background:var(--fda)"></i></div></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No late-stage readouts in the next 12 months.</div>'}
     ${evi(r.fda.evidence.slice(1))}<div class="note">Approval odds are historical base rates by phase and disease area (BIO/QLS 2011–2020), adjusted for the sponsor's track record. They are a starting point, not a forecast of this specific drug.</div></div>` : ''}
   <div class="card"><h3><span><i class="dot" style="background:var(--earn)"></i>Earnings</span><span class="tag">${esc(e.leanLabel)}</span></h3>
-    <div class="stats" style="margin-bottom:16px">${stat('Next report (est.)', e.nextDate ? fDate(e.nextDate, 1) : '—')}${stat('Typical move', e.expectedMove ? '±' + (e.expectedMove * 100).toFixed(1) + '%' : '—')}${stat('EPS model, next qtr', e.epsForecast != null ? '$' + e.epsForecast.toFixed(2) : '—')}${stat('Revenue model', fMoney(e.revForecast))}</div>
+    <div class="stats" style="margin-bottom:16px">${stat(e.dateConfirmed ? 'Next report (confirmed)' : 'Next report (est.)', e.nextDate ? fDate(e.nextDate, 1) : '—')}${stat('Typical move', e.expectedMove ? '±' + (e.expectedMove * 100).toFixed(1) + '%' : '—')}${e.epsConsensus != null ? stat('EPS consensus', '$' + e.epsConsensus.toFixed(2)) : stat('EPS model, next qtr', e.epsForecast != null ? '$' + e.epsForecast.toFixed(2) : '—')}${stat('Revenue model', fMoney(e.revForecast))}</div>
     <div class="grid2"><div><div class="sub" style="margin-bottom:6px">Stock reaction to past reports</div>${reactionBars(e.history)}</div><div><div class="sub" style="margin-bottom:6px">Quarterly EPS, with next-quarter model estimate</div>${epsBars(e)}</div></div>${evi(e.evidence)}</div>
   <div class="card"><h3><span><i class="dot" style="background:var(--event)"></i>Event radar</span><span class="tag">${esc(r.event.level)}</span></h3>${evi(r.event.evidence)}</div>
   <div class="card"><h3>News sentiment <span class="tag">${esc(nw.label)}</span></h3>
@@ -396,6 +409,84 @@ function renderSignals() {
   const shown = rows.filter(x => S.tape === 'All' || x.cat === S.tape).slice(0, 150);
   $('#signals').innerHTML = `<div class="chips" style="margin:4px">${['All', 'M&A', 'FDA', 'Earnings', 'Event'].map(c => `<button class="chip${S.tape === c ? ' on' : ''}" data-tape="${c}">${c}</button>`).join('')}</div>`
     + (shown.length ? `<div class="card">${shown.map(x => `<div class="row"><span class="d">${fDate(x.date)}</span><b class="t" data-open="${esc(x.t)}">${esc(x.t)}</b><span><span class="tag"><i class="dot" style="background:${CAT_COLOR[x.cat]}"></i>${x.cat}</span></span><span class="x">${x.url ? `<a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.text)} ↗</a>` : esc(x.text)}</span></div>`).join('')}</div>` : '<div class="empty">Run a screen first — dated signals from every company you screen stream in here, newest first.</div>');
+}
+
+// ---------- Direction forecast & options ----------
+function forecastCard(fc, title = 'Direction forecast') {
+  if (!fc) return '';
+  const down = fc.verdict === 'Down', p = down ? 1 - fc.pUp : fc.pUp, stat = (n, v) => `<div><span>${n}</span><b>${v}</b></div>`;
+  return `<div class="card"><h3>${title}<span class="tag">Next ${fc.horizon} trading days</span></h3>
+    <div class="fch"><div class="call ${fc.verdict === 'Up' ? 'up' : down ? 'dn' : ''}">${fc.verdict === 'Up' ? '▲ Up' : down ? '▼ Down' : '◆ No clear edge'}</div>
+      <div class="sub" style="font-size:13px"><b style="color:var(--ink);font-size:18px">${Math.round(p * 100)}%</b> modelled chance the price is ${down ? 'lower' : 'higher'} in ${fc.horizon} trading days</div></div>
+    <div class="stats" style="margin:14px 0">${stat('Expected move', fPct(Math.exp(fc.expRet) - 1))}${stat('Likely range', '$' + fc.low.toFixed(2) + ' – $' + fc.high.toFixed(2))}${stat('Typical ' + fc.horizon + '-day swing', '±' + (fc.sigma * 100).toFixed(1) + '%')}${stat('Signal track record', fc.hitRate != null ? Math.round(fc.hitRate * 100) + '% right · ' + fc.samples + ' calls' : 'Too little history')}</div>
+    ${fc.factors.map(f => `<div class="fac"><span>${esc(f.name)}</span><span class="sub">${esc(f.note)}</span>${sentBar(Math.round(f.v * 100))}</div>`).join('')}
+    <div class="note">Bars right of center push the forecast up, left push it down. Technicals and news tilt the odds away from the stock's own baseline; the tilt is scaled by how often this same signal was right on this stock over the past year. Short-term direction is close to a coin flip — treat this as a lean, not a promise.</div></div>`;
+}
+
+function chainCard(d) {
+  const ch = d.chain;
+  if (d.needsKey) return `<div class="card"><h3>Option chain</h3><div class="empty">Option chains need a free data key. Add a Tradier or Alpha Vantage key and every strike loads here, marked green or red.<br><br><button class="primary" style="width:auto;padding:9px 20px;margin:0" data-settings>Add a free key</button></div></div>`;
+  if (!ch) return '<div class="card"><h3>Option chain</h3><div class="empty">Not enough price history to model this symbol.</div></div>';
+  if (ch.error) return `<div class="card"><h3>Option chain</h3><div class="empty">${esc(ch.error)}.<br><br><button class="ghost" data-settings>Check the key in Settings</button></div></div>`;
+  const cell = o => { const c = o.up ? 'g' : 'r', pc = o.change == null ? '—' : fPct(Math.max(-0.99, Math.min(9.99, o.change)), 0); return [`<td class="${c} o"><i>${o.up ? '▲' : '▼'}</i> ${pc}</td>`, `<td class="${c}">${o.mid != null ? o.mid.toFixed(2) : '—'}</td>`, `<td class="${c}">${o.iv ? Math.round(o.iv * 100) + '%' : '—'}</td>`, `<td class="${c}">${o.delta != null ? o.delta.toFixed(2) : '—'}</td>`]; };
+  const blank = '<td class="sub">—</td>'.repeat(4);
+  let spot = false, body = '';
+  for (const r of ch.rows) {
+    if (!spot && r.strike > d.price) { spot = true; body += `<tr class="spot"><td colspan="9">$${d.price.toFixed(2)} · current price</td></tr>`; }
+    body += `<tr>${r.call ? cell(r.call).join('') : blank}<td class="k">${r.strike % 1 ? r.strike.toFixed(2) : r.strike}</td>${r.put ? cell(r.put).reverse().join('') : blank}</tr>`;
+  }
+  const count = side => { const a = ch.rows.filter(r => r[side]); return `${a.filter(r => r[side].up).length} green · ${a.filter(r => !r[side].up).length} red`; };
+  return `<div class="card"><h3>Option chain · ${ch.rows.length} strikes<span class="key"><span>Calls: ${count('call')}</span><span>Puts: ${count('put')}</span></span></h3>
+    <div class="exps">${ch.expirations.map(x => `<button class="chip${x === ch.exp ? ' on' : ''}" data-exp="${x}">${fDate(x, 1)}</button>`).join('')}</div>
+    <div class="chainwrap"><table class="chain"><thead><tr><th>Call outlook</th><th>Price</th><th>IV</th><th>Delta</th><th class="k">Strike</th><th>Delta</th><th>IV</th><th>Price</th><th>Put outlook</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="note"><b style="color:var(--up)">Green ▲</b> = the model expects that contract to be worth more after ${ch.holdDays} trading day${ch.holdDays === 1 ? '' : 's'}; <b style="color:var(--down)">red ▼</b> = worth less. The percentage is the expected change in the option's value: it is priced across the range of places the forecast says the stock could land, then compared with today, so time decay counts against every contract. Expected volatility blends what the option market implies with what the stock has actually been doing. Expires in ${ch.daysToExpiry} days · at-the-money implied volatility ${Math.round(ch.atmIv * 100)}% · data via ${ch.provider === 'tradier' ? 'Tradier' : 'Alpha Vantage (prior session)'}.</div></div>`;
+}
+
+function renderOptions() {
+  const o = S.opt || {}, d = o.data;
+  $('#options').innerHTML = `<form id="optform"><input name="symbol" placeholder="Symbol, e.g. QQQ" value="${esc(o.symbol || '')}" autocomplete="off" spellcheck="false" required><button type="submit">Predict</button>${['QQQ', 'SPY', 'NVDA', 'AAPL', 'TSLA', 'AMD'].map(s => `<button type="button" class="chip" data-optsym="${s}">${s}</button>`).join('')}</form>`
+    + (o.loading ? `<div class="empty">Running the forecast for ${esc(o.symbol)}…</div>`
+      : o.error ? `<div class="empty">${esc(o.error)}.</div>`
+      : !d ? '<div class="empty">Pick any stock or ETF. You get an up / down forecast for the price, and every option strike marked green or red.</div>'
+      : `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div><div style="font-size:24px;font-weight:700">${esc(d.symbol)}</div><div class="sub">${esc(d.name)}</div></div><div style="text-align:right"><b style="font-size:22px">$${d.price.toFixed(2)}</b><div class="${d.chg1d >= 0 ? 'up' : 'dn'}">${fPct(d.chg1d, 2)} today</div></div></div>`
+        + (forecastCard(d.forecast, 'Price forecast') || '<div class="card"><div class="empty">This symbol needs about a year of price history before a forecast can be made.</div></div>') + chainCard(d));
+  const w = $('.chainwrap'), s = $('.chain .spot');
+  if (w && s) w.scrollTop = s.offsetTop - w.clientHeight / 2;
+}
+
+async function loadOptions(symbol, exp) {
+  symbol = symbol.trim().toUpperCase();
+  S.opt = { symbol, loading: true, data: exp ? S.opt?.data : null };
+  if (!exp) renderOptions();
+  try { S.opt = { symbol, data: await api(`/api/predict?symbol=${encodeURIComponent(symbol)}${exp ? '&exp=' + exp : ''}`) }; } catch (e) { S.opt = { symbol, error: e.message }; }
+  if (S.view === 'options') renderOptions();
+}
+
+// ---------- Settings: your API keys ----------
+const PROVIDERS = [
+  ['secContact', 'sec', 'SEC EDGAR — your contact', 'The SEC asks automated tools to say who they are. Enter your name and email; there is no signup and no key.', 'https://www.sec.gov/search-filings/edgar-application-programming-interfaces', 'Jane Doe jane@example.com', 'About the API'],
+  ['tradier', 'tradier', 'Tradier — option chains', 'Every strike with implied volatility and greeks. The free developer sandbox is 15 minutes delayed.', 'https://developer.tradier.com/', 'Access token', 'Get a free token'],
+  ['alphavantage', 'alphavantage', 'Alpha Vantage — options & news', 'Option chains (prior session) when no Tradier token is set, plus a second news-sentiment read for forecasts. Free tier: 25 requests a day.', 'https://www.alphavantage.co/support/#api-key', 'API key', 'Get a free key'],
+  ['finnhub', 'finnhub', 'Finnhub — earnings calendar', 'Confirmed earnings dates and analyst EPS estimates instead of projected dates.', 'https://finnhub.io/register', 'API key', 'Get a free key'],
+];
+const MORE_APIS = [['Polygon.io (Massive)', 'https://polygon.io/', 'prices, reference data'], ['Twelve Data', 'https://twelvedata.com/', 'prices, indicators'], ['Financial Modeling Prep', 'https://site.financialmodelingprep.com/developer/docs', 'fundamentals, calendars'], ['Tiingo', 'https://www.tiingo.com/', 'prices, news'], ['MarketData.app', 'https://www.marketdata.app/', 'option chains'], ['Alpaca Market Data', 'https://alpaca.markets/data', 'prices, option snapshots'], ['FRED (St. Louis Fed)', 'https://fred.stlouisfed.org/docs/api/api_key.html', 'rates, macro data'], ['openFDA', 'https://open.fda.gov/apis/authentication/', 'higher FDA rate limits'], ['OpenSky Network', 'https://opensky-network.org/', 'aircraft positions']];
+
+async function openSettings() {
+  $('#drawer').classList.add('on'); $('#scrim').classList.add('on');
+  const cur = await api('/api/settings').catch(() => ({}));
+  $('#drawer').innerHTML = `<div class="dh"><div><div class="tk">API keys</div><div class="sub">Everything works without keys except option chains. Keys are saved only on this computer, in catalyst/data/settings.json.</div></div><button class="x" data-close style="margin-left:auto" aria-label="Close">✕</button></div>
+    <form id="setform" class="card">${PROVIDERS.map(([field, id, name, what, url, ph, cta]) => `<div class="prov"><h4>${name}<a href="${url}" target="_blank" rel="noopener">${cta} ↗</a></h4><div class="sub">${what}</div>
+      <div class="rowi"><input type="${field === 'secContact' ? 'text' : 'password'}" name="${field}" autocomplete="off" placeholder="${cur[field] && field !== 'secContact' ? 'Saved ' + esc(cur[field]) + ' — type to replace' : ph}" value="${field === 'secContact' ? esc(cur[field] || '') : ''}"><button type="button" class="ghost" data-test="${id}">Test</button>${cur[field] ? `<button type="button" class="ghost" data-clear="${field}">Remove</button>` : ''}</div>
+      ${field === 'tradier' ? `<label class="tog" style="margin:10px 0 0">This is a live brokerage token, not a sandbox token<input type="checkbox" name="tradierLive"${cur.tradierLive ? ' checked' : ''}><b></b></label>` : ''}<div class="res sub" id="res-${id}"></div></div>`).join('')}
+      <button class="primary" style="margin:14px 0 0">Save keys</button></form>
+    <div class="card"><h3>More free market-data APIs</h3><div class="sub" style="margin-bottom:8px">Not wired in yet — useful if you want to extend the app.</div><div class="links">${MORE_APIS.map(([n, u, w]) => `<a href="${u}" target="_blank" rel="noopener">${n} ↗<span>${w}</span></a>`).join('')}</div></div>`;
+}
+
+async function saveSettings(patch) {
+  await api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+  S.res = {}; // keys change what the data looks like, so re-run the current screen
+  if (S.tickers.length) run(S.tickers);
+  await openSettings();
 }
 
 // ---------- Jet tracker ----------
@@ -454,6 +545,7 @@ function show(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
   if (view === 'calendar') renderCalendar();
   if (view === 'signals') renderSignals();
+  if (view === 'options') renderOptions();
   if (view === 'jets') { if (!map) initMap(); map.invalidateSize(); loadJets(); } else clearTimeout(jetTimer);
 }
 
@@ -467,11 +559,22 @@ document.addEventListener('click', e => {
   if ((el = hit('[data-screen]'))) { S.crit = { ...({ ...SCREENS, ...S.saved }[el.dataset.screen]) }; store('crit', S.crit); renderCrit(); return renderTable(); }
   if ((el = hit('[data-tape]'))) { S.tape = el.dataset.tape; return renderSignals(); }
   if ((el = hit('[data-untag]'))) return api('/api/fleet?reg=' + encodeURIComponent(el.dataset.untag), { method: 'DELETE' }).then(loadJets);
+  if (hit('[data-settings]')) return openSettings();
+  if ((el = hit('[data-optsym]'))) return loadOptions(el.dataset.optsym);
+  if ((el = hit('[data-exp]'))) return loadOptions(S.opt.symbol, el.dataset.exp);
+  if ((el = hit('[data-clear]'))) return saveSettings({ [el.dataset.clear]: '' });
+  if ((el = hit('[data-test]'))) {
+    const out = $('#res-' + el.dataset.test); out.textContent = 'Testing…'; out.className = 'res sub';
+    return api('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: el.dataset.test }) })
+      .then(r => { out.textContent = r.ok ? '✓ Connected — working' : '✕ ' + r.error + (el.form && [...el.form.elements].some(i => i.type !== 'checkbox' && i.value && i.name !== 'secContact') ? ' (save your changes first)' : ''); out.className = 'res ' + (r.ok ? 'up' : 'dn'); });
+  }
   if ((el = hit('[data-open]')) && !hit('a')) return openDetail(el.dataset.open);
 });
 document.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id === 'search') { const t = $('#q').value.trim().toUpperCase(); if (t) { openDetail(t); $('#q').value = ''; $('#q').blur(); } }
+  if (e.target.id === 'optform') loadOptions(e.target.symbol.value);
+  if (e.target.id === 'setform') { const f = e.target, patch = { tradierLive: f.tradierLive.checked, secContact: f.secContact.value }; for (const k of ['tradier', 'alphavantage', 'finnhub']) if (f[k].value.trim()) patch[k] = f[k].value; saveSettings(patch); }
   if (e.target.id === 'tagform') { const f = e.target; api('/api/fleet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reg: f.reg.value, ticker: f.ticker.value }) }).then(loadJets, err => alert(err.message)); }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $('#q').focus(); } });

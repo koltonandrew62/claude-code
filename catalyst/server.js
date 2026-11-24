@@ -5,7 +5,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { analyze } = require('./lib/analyze');
+const { analyze, predict, clear } = require('./lib/analyze');
+const settings = require('./lib/settings');
 const src = require('./lib/sources');
 const jets = require('./lib/jets');
 const universes = require('./lib/universes');
@@ -37,6 +38,13 @@ http.createServer(async (req, res) => {
       if (origin && new URL(origin).host !== req.headers.host) throw fail(403, 'Cross-origin request refused');
     }
     if (u.pathname === '/api/analyze') return json(res, 200, await analyze(ticker(u.searchParams.get('ticker'))));
+    if (u.pathname === '/api/predict') { const exp = u.searchParams.get('exp') || ''; return json(res, 200, await predict(ticker(u.searchParams.get('symbol')), /^\d{4}-\d\d-\d\d$/.test(exp) ? exp : '')); }
+    if (u.pathname === '/api/settings' && req.method === 'GET') return json(res, 200, settings.view());
+    if (u.pathname === '/api/settings' && req.method === 'POST') { settings.set(await body(req)); clear(); return json(res, 200, settings.view()); }
+    if (u.pathname === '/api/settings/test' && req.method === 'POST') {
+      const { provider } = await body(req);
+      try { await src.testProvider(String(provider)); return json(res, 200, { ok: true }); } catch (e) { return json(res, 200, { ok: false, error: e.name === 'TimeoutError' ? 'timed out' : e.message === 'fetch failed' ? 'could not reach the service' : e.message }); }
+    }
     if (u.pathname === '/api/universes') return json(res, 200, universes);
     if (u.pathname === '/api/status') return json(res, 200, src.status);
     if (u.pathname === '/api/jets') return json(res, 200, jets.state());

@@ -33,11 +33,12 @@ async function run(ticker) {
     bio ? soft(src.trials(name)) : null, bio ? soft(src.approvals(name)) : null, soft(src.geocode(sub?.address, sub?.place)),
   ]);
   jets.setHQ(ticker, name, sub?.city || '', hq);
+  const calendar = await soft(src.earningsCalendar(ticker));
 
   const tech = S.technicals(bars);
   const fund = S.fundamentals(facts, tech?.last);
   const sent = S.sentiment(newsItems);
-  const earn = S.earnings({ filings, bars, facts, tech, sent });
+  const earn = S.earnings({ filings, bars, facts, tech, sent, calendar });
   const ma = S.merger({ filings, tech, fund, sent, fts, jetEvents: jets.eventsFor(ticker) });
   const fda = S.fda({ sic: sub?.sic, mcap: fund?.mcap, trials, approvals, sent });
   const event = S.eventRadar({ filings, tech, earn, fdaRes: fda, sent });
@@ -47,7 +48,7 @@ async function run(ticker) {
 
   return {
     ticker, name: pretty(name), industry: sub?.industry || '', exchange: sub?.exchange || '', city: sub?.city || '', bio, asOf: Date.now(),
-    price: tech, fund,
+    price: tech, fund, forecast: S.forecast(bars, sent),
     chart: (bars || []).slice(-252).map(b => [b.d, +b.c.toFixed(2)]),
     markers: [...earn.history.map(h => ({ d: h.date, type: 'earn', label: `Earnings ${S.pct(h.move)}` })), ...ma.marks],
     scores: { overall: Math.round(0.65 * parts[0][1] + 0.35 * parts[1][1]), merger: ma.score, fda: fda.applicable ? fda.score : null, earnings: earn.score, event: event.score, sentiment: sent.score },
@@ -62,4 +63,29 @@ async function run(ticker) {
   };
 }
 
-module.exports = { analyze };
+// Direction forecast plus (with an options key) the full chain for one expiration, every strike marked.
+async function predict(symbol, exp) {
+  const warnings = [];
+  const soft = p => Promise.resolve(p).catch(e => { if (!warnings.includes(e.message)) warnings.push(e.message); return null; });
+  const [bars, ent] = await Promise.all([src.prices(symbol).catch(e => { throw Object.assign(new Error(e.message), { status: 502 }); }), soft(src.resolve(symbol))]);
+  if (!bars || bars.length < 2) throw Object.assign(new Error(`No price history found for ${symbol}`), { status: 404 });
+  const name = ent?.name || symbol, last = bars[bars.length - 1].c;
+  const [newsItems, av] = await Promise.all([soft(src.news(symbol, name)), soft(src.avSentiment(symbol))]);
+  const sent = S.sentiment(newsItems), fc = S.forecast(bars, sent, av), provider = src.optionsProvider();
+  let chain = null;
+  if (provider && fc) {
+    try {
+      const expirations = await src.optionExpirations(symbol);
+      if (!expirations.length) throw new Error('No listed options were found for this symbol');
+      const week = S.iso(Date.now() + 6 * 864e5);
+      const pick = expirations.includes(exp) ? exp : expirations.find(x => x >= week) || expirations[0];
+      chain = { provider, expirations, exp: pick, ...S.markOptions(await src.optionChain(symbol, pick), fc, pick) };
+    } catch (e) { chain = { provider, error: e.message }; }
+  }
+  return {
+    symbol, name: ent ? pretty(name) : symbol, price: last, chg1d: last / bars[bars.length - 2].c - 1, forecast: fc,
+    news: { score: sent.score, label: sent.label, count: sent.count, items: sent.items.slice(0, 6) }, chain, needsKey: !provider, warnings,
+  };
+}
+
+module.exports = { analyze, predict, clear: () => memo.clear() };

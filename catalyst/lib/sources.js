@@ -5,18 +5,19 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { extractFacts, iso } = require('./signals');
+const { extractFacts, iso, clamp } = require('./signals');
+const settings = require('./settings');
 
 const CACHE = process.env.CATALYST_CACHE || path.join(__dirname, '..', '.cache');
 fs.mkdirSync(CACHE, { recursive: true });
 
-// The SEC asks automated clients to identify themselves: set SEC_USER_AGENT="Your Name you@example.com".
-const SEC_UA = process.env.SEC_USER_AGENT || 'CatalystDesk/1.0 (personal research tool)';
+// The SEC asks automated clients to identify themselves: enter your contact in Settings (or set SEC_USER_AGENT).
+const secUA = () => (settings.get('secContact') ? `CatalystDesk/1.0 ${settings.get('secContact')}` : process.env.SEC_USER_AGENT || 'CatalystDesk/1.0 (personal research tool)');
 const WEB_UA = 'Mozilla/5.0 (compatible; CatalystDesk/1.0)';
 const MIN = 6e4, HOUR = 36e5, DAY = 864e5;
 const status = {}, inflight = new Map(), slot = {};
 
-async function get(url, { source, ttl, gap = 150, ua = SEC_UA, text = false, pick = x => x }) {
+async function get(url, { source, ttl, gap = 150, ua, headers, text = false, pick = x => x }) {
   const file = path.join(CACHE, crypto.createHash('sha1').update(url).digest('hex') + '.json');
   let cached;
   try { cached = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
@@ -27,10 +28,10 @@ async function get(url, { source, ttl, gap = 150, ua = SEC_UA, text = false, pic
     slot[host] = at + gap; // space out requests to each host
     if (at > Date.now()) await new Promise(r => setTimeout(r, at - Date.now()));
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': ua, Accept: text ? '*/*' : 'application/json' }, signal: AbortSignal.timeout(20000) });
+      const res = await fetch(url, { headers: { 'User-Agent': ua || secUA(), Accept: text ? '*/*' : 'application/json', ...headers }, signal: AbortSignal.timeout(20000) });
       let d = null;
       if (res.status !== 404) {
-        if (!res.ok) throw new Error(res.status === 429 ? 'is rate limiting requests' : `returned HTTP ${res.status}`);
+        if (!res.ok) throw new Error(res.status === 429 ? 'is rate limiting requests' : res.status === 401 || res.status === 403 ? 'rejected the request (check the key in Settings)' : `returned HTTP ${res.status}`);
         d = pick(text ? await res.text() : await res.json());
       }
       status[source] = { ok: true, at: Date.now() };
@@ -202,4 +203,93 @@ const pickAircraft = d => (d.ac || []).filter(a => a.lat != null && a.lon != nul
 const aircraftByType = type => get(`https://api.adsb.lol/v2/type/${type}`, { source: 'Aircraft', ttl: 3 * MIN, gap: 2000, pick: pickAircraft });
 const aircraftByReg = reg => get(`https://api.adsb.lol/v2/reg/${encodeURIComponent(reg)}`, { source: 'Aircraft', ttl: 3 * MIN, gap: 2000, pick: pickAircraft });
 
-module.exports = { status, shortName, parseRss, resolve, submissions, facts, fullText, prices, news, trials, approvals, geocode, aircraftByType, aircraftByReg };
+// ---------- Sources that use a key you enter in Settings ----------
+
+const num = v => (v == null || v === '' || Number.isNaN(+v) ? null : +v);
+const optionsProvider = () => (settings.get('tradier') ? 'tradier' : settings.get('alphavantage') ? 'alphavantage' : null);
+const tradierBase = () => (settings.get('tradierLive') ? 'https://api.tradier.com' : 'https://sandbox.tradier.com');
+const tradierAuth = () => ({ Authorization: `Bearer ${settings.get('tradier')}` });
+const apiMessage = d => String(d?.Information || d?.Note || d?.['Error Message'] || d?.fault?.faultstring || 'returned no data').slice(0, 160);
+
+// Both providers are reduced to the same shape: { exp, type: 'C' | 'P', strike, bid, ask, last, iv, delta, vol, oi }
+function normTradier(d) {
+  const o = d?.options?.option;
+  return (Array.isArray(o) ? o : o ? [o] : []).map(c => ({
+    exp: c.expiration_date, type: c.option_type === 'call' ? 'C' : 'P', strike: +c.strike, bid: num(c.bid), ask: num(c.ask), last: num(c.last),
+    iv: num(c.greeks?.mid_iv) || num(c.greeks?.smv_vol), delta: num(c.greeks?.delta), vol: +c.volume || 0, oi: +c.open_interest || 0,
+  }));
+}
+function normAlphaVantage(d) {
+  if (!Array.isArray(d?.data)) throw new Error(apiMessage(d));
+  return d.data.map(c => ({
+    exp: c.expiration, type: c.type === 'call' ? 'C' : 'P', strike: +c.strike, bid: num(c.bid), ask: num(c.ask), last: num(c.last) || num(c.mark),
+    iv: num(c.implied_volatility), delta: num(c.delta), vol: +c.volume || 0, oi: +c.open_interest || 0,
+  }));
+}
+// Alpha Vantage returns the whole chain (prior session) in one call; cached hard because the free tier is 25 calls a day.
+const avChain = symbol => get(`https://www.alphavantage.co/query?function=HISTORICAL_OPTIONS&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(settings.get('alphavantage'))}`, { source: 'Options', ttl: 6 * HOUR, gap: 1200, ua: WEB_UA, pick: normAlphaVantage });
+
+async function optionExpirations(symbol) {
+  const today = iso(Date.now());
+  if (optionsProvider() === 'tradier') {
+    return get(`${tradierBase()}/v1/markets/options/expirations?symbol=${encodeURIComponent(symbol)}`, {
+      source: 'Options', ttl: 6 * HOUR, gap: 600, ua: WEB_UA, headers: tradierAuth(),
+      pick: d => [].concat(d?.expirations?.date || []).filter(x => x >= today),
+    });
+  }
+  return [...new Set((await avChain(symbol)).map(c => c.exp))].filter(x => x >= today).sort();
+}
+
+async function optionChain(symbol, exp) {
+  if (optionsProvider() === 'tradier') {
+    const q = new URLSearchParams({ symbol, expiration: exp, greeks: 'true' });
+    return get(`${tradierBase()}/v1/markets/options/chains?${q}`, { source: 'Options', ttl: 10 * MIN, gap: 600, ua: WEB_UA, headers: tradierAuth(), pick: normTradier });
+  }
+  return (await avChain(symbol)).filter(c => c.exp === exp);
+}
+
+// Finnhub: the next confirmed earnings date and the analyst EPS estimate.
+function earningsCalendar(ticker) {
+  const key = settings.get('finnhub');
+  if (!key) return Promise.resolve(null);
+  const today = iso(Date.now()), q = new URLSearchParams({ symbol: ticker, from: today, to: iso(Date.now() + 120 * DAY) });
+  return get(`https://finnhub.io/api/v1/calendar/earnings?${q}`, {
+    source: 'Finnhub', ttl: 12 * HOUR, gap: 1100, ua: WEB_UA, headers: { 'X-Finnhub-Token': key },
+    pick: d => (d.earningsCalendar || []).filter(e => e.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1)).map(e => ({ date: e.date, epsEstimate: num(e.epsEstimate) }))[0] || null,
+  });
+}
+
+// Alpha Vantage's own article-level sentiment, as a second opinion for the direction forecast (-1..+1).
+function avSentiment(ticker) {
+  const key = settings.get('alphavantage');
+  if (!key) return Promise.resolve(null);
+  return get(`https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${encodeURIComponent(ticker)}&limit=50&apikey=${encodeURIComponent(key)}`, {
+    source: 'Alpha Vantage', ttl: 6 * HOUR, gap: 1200, ua: WEB_UA,
+    pick: d => {
+      if (!Array.isArray(d?.feed)) throw new Error(apiMessage(d));
+      let w = 0, s = 0;
+      for (const a of d.feed) for (const t of a.ticker_sentiment || []) {
+        if (t.ticker === ticker) { const r = +t.relevance_score || 0; w += r; s += r * (+t.ticker_sentiment_score || 0); }
+      }
+      return w ? { score: clamp(s / w / 0.35, -1, 1), articles: d.feed.length } : null;
+    },
+  });
+}
+
+// One live call per provider so the Settings page can say whether a key works.
+async function testProvider(p) {
+  const hit = async (url, headers, problem) => {
+    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': WEB_UA, ...headers }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'the key was rejected' : r.status === 429 ? 'rate limit reached' : `HTTP ${r.status}`);
+    const bad = problem(await r.json());
+    if (bad) throw new Error(bad);
+  };
+  if (p === 'sec') return hit('https://data.sec.gov/submissions/CIK0000320193.json', { 'User-Agent': secUA() }, j => (j.name ? '' : 'unexpected response'));
+  if (!settings.get(p)) throw new Error('no key saved yet');
+  if (p === 'tradier') return hit(`${tradierBase()}/v1/markets/options/expirations?symbol=AAPL`, tradierAuth(), j => (j.expirations ? '' : apiMessage(j)));
+  if (p === 'alphavantage') return hit(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=${encodeURIComponent(settings.get(p))}`, {}, j => (j['Global Quote'] ? '' : apiMessage(j)));
+  if (p === 'finnhub') return hit('https://finnhub.io/api/v1/quote?symbol=AAPL', { 'X-Finnhub-Token': settings.get(p) }, j => (typeof j.c === 'number' ? '' : apiMessage(j)));
+  throw new Error('unknown provider');
+}
+
+module.exports = { status, shortName, parseRss, resolve, submissions, facts, fullText, prices, news, trials, approvals, geocode, aircraftByType, aircraftByReg, optionsProvider, normTradier, normAlphaVantage, optionExpirations, optionChain, earningsCalendar, avSentiment, testProvider };

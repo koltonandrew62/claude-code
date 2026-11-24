@@ -30,6 +30,7 @@ SEC_USER_AGENT="Your Name you@example.com" node server.js
 |---|---|
 | **Screener** | Score a list of tickers and filter by catalyst score, M&A / FDA / earnings / event scores, news sentiment, days to earnings, market cap, volume, revenue growth, price. One-click preset screens, save your own, watchlist stars, CSV export. |
 | **Company detail** | Click any row (or type a ticker, press `/`). Price chart with earnings and M&A-filing markers plus a likely 30-day range, the evidence behind each score, trial pipeline with approval odds, earnings reaction history, an EPS model estimate, scored headlines, recent filings. |
+| **Options** | Pick any stock or ETF (QQQ, NVDA…). You get an up / down price forecast for the next 5 trading days, and — with a free options key — every strike of the chosen expiration, calls and puts, marked green (expected to gain value) or red. |
 | **Calendar** | Upcoming estimated earnings dates and FDA / trial catalysts across everything you screened. |
 | **Signal tape** | Every dated signal across your screen, newest first. |
 | **Jet tracker** | Live map of large business jets, your companies' headquarters, and jets parked near them. |
@@ -57,6 +58,37 @@ reliably predict a merger or an FDA decision; this tells you where the public ev
   coiled volatility, price gaps, a burst of 8-Ks, high-impact 8-K items, a spike in news flow.
 - **News sentiment** — Recent headlines scored with a finance word list, weighted toward the last few
   days, with fund-holdings spam and law-firm ads removed.
+
+## Price forecast and options
+
+- **Price forecast** — Five technical factors (price vs its 50-day average, 50- vs 200-day trend, 20-day
+  momentum, RSI, MACD), each scaled by the stock's own volatility, plus news sentiment. They tilt the
+  odds away from the stock's baseline drift. How far they may tilt is set by a walk-back test: how often
+  the same signal called the next 5 days correctly on this stock over the past year. If the signal has
+  no track record on a stock, the forecast stays near 50/50.
+- **Options** — Each contract is valued with Black-Scholes at today's price and again after the
+  holding period, averaged across the range of prices the forecast allows (expected volatility is half
+  the market's implied volatility, half the stock's recent realized volatility). Green means the expected
+  value is higher than today's; red means lower. Time decay counts against every contract, so with no
+  directional edge most long options are red — which is how options actually behave.
+
+Short-term direction is close to a coin flip. Treat a forecast as a lean, not a promise.
+
+## API keys
+
+Everything runs without keys except option chains. Click **API keys** in the app to enter them; they are
+saved only on your computer in `data/settings.json`, and each one has a **Test** button.
+
+| Key | What it unlocks | Free signup |
+|---|---|---|
+| SEC contact (name + email) | Identifies you to SEC EDGAR, as the SEC asks. No key. | https://www.sec.gov/search-filings/edgar-application-programming-interfaces |
+| Tradier token | Option chains with implied volatility and greeks (sandbox is 15 minutes delayed) | https://developer.tradier.com/ |
+| Alpha Vantage key | Option chains (prior session) if you have no Tradier token; second news-sentiment source. 25 requests a day. | https://www.alphavantage.co/support/#api-key |
+| Finnhub key | Confirmed earnings dates and analyst EPS estimates | https://finnhub.io/register |
+
+Other free market-data APIs worth knowing (not wired in): Polygon.io, Twelve Data, Financial Modeling
+Prep, Tiingo, MarketData.app, Alpaca Market Data, FRED, openFDA, OpenSky Network. Links are on the
+API keys page.
 
 ## Jet tracker
 

@@ -153,7 +153,7 @@ function sentiment(items, now = Date.now()) {
 
 // ---------- Earnings ----------
 
-function earnings({ filings, bars, facts, tech, sent }, now = Date.now()) {
+function earnings({ filings, bars, facts, tech, sent, calendar }, now = Date.now()) {
   const today = iso(now), ev = [];
   const add = (w, text, date) => ev.push({ cat: 'Earnings', w, text, date: date || null, url: null });
   let dates = filings.filter(f => f.form === '8-K' && /(^|,)2\.02(,|$)/.test(f.items)).map(f => f.date).sort();
@@ -172,6 +172,8 @@ function earnings({ filings, bars, facts, tech, sent }, now = Date.now()) {
   const shift = (d, k) => iso(Date.parse(d) + k * DAY);
   let next = dates.length >= 4 ? shift(dates[dates.length - 4], 364) : dates.length ? shift(dates[dates.length - 1], 91) : null;
   if (next && next < today) next = daysBetween(next, today) <= 10 ? today : null;
+  const confirmed = calendar?.date >= today; // a real calendar date beats the projection
+  if (confirmed) next = calendar.date;
   const daysTo = next ? daysBetween(today, next) : null;
 
   const e = facts?.epsQ || [], r = facts?.revenueQ || [];
@@ -201,7 +203,7 @@ function earnings({ filings, bars, facts, tech, sent }, now = Date.now()) {
   if (sent) lean += Math.round(sent.score * 0.2);
   lean = clamp(lean, -100, 100);
 
-  if (next) add(Math.round(score * 0.5), `Next earnings expected around ${next}${daysTo ? ` (${plural(daysTo, 'day')})` : ' (due now)'}, based on its reporting pattern`);
+  if (next) add(Math.round(score * 0.5), `Next earnings expected around ${next}${daysTo ? ` (${plural(daysTo, 'day')})` : ' (due now)'}${confirmed ? ', confirmed on the earnings calendar' : ', based on its reporting pattern'}`);
   if (history.length) add(8, `Typical earnings reaction ±${(expectedMove * 100).toFixed(1)}%; the stock rose after ${ups} of the last ${history.length} reports`);
   if (epsYoY != null && Math.abs(epsYoY) > 0.1) add(8, `EPS ${pct(epsYoY, 0)} year over year last quarter`);
   if (accel != null && Math.abs(accel) > 0.01) add(7, `Revenue growth ${accel > 0 ? 'accelerating' : 'slowing'} (${pct(revYoY)} vs ${pct(revPrev)} the quarter before)`);
@@ -210,7 +212,7 @@ function earnings({ filings, bars, facts, tech, sent }, now = Date.now()) {
 
   return {
     score, level: level(score), lean, leanLabel: lean >= 25 ? 'Bullish lean' : lean <= -25 ? 'Bearish lean' : 'Neutral lean',
-    nextDate: next, daysTo, expectedMove, upRatio, history, epsYoY, revYoY, revAccel: accel,
+    nextDate: next, dateConfirmed: confirmed, epsConsensus: confirmed ? calendar.epsEstimate ?? null : null, daysTo, expectedMove, upRatio, history, epsYoY, revYoY, revAccel: accel,
     epsQ: e.slice(-8), epsForecast, revForecast, evidence: ev,
   };
 }
@@ -377,4 +379,122 @@ function eventRadar({ filings, tech, earn, fdaRes, sent }, now = Date.now()) {
   return { score, level: level(score), evidence: ev.sort((a, b) => b.w - a.w) };
 }
 
-module.exports = { iso, daysBetween, pct, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar };
+// ---------- Direction forecast: will the price be higher or lower in h trading days? ----------
+
+const normCdf = x => {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp((-x * x) / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - p : p;
+};
+
+// Technicals and news tilt the odds away from the stock's own baseline; how far they are allowed to tilt
+// depends on how often the same technical signal was right on this stock over the past year.
+function forecast(bars, sent, av, h = 5) {
+  if (!bars || bars.length < 260) return null;
+  const c = bars.map(b => b.c), n = c.length, last = c[n - 1];
+  const pre = [0];
+  for (const x of c) pre.push(pre[pre.length - 1] + x);
+  const sma = (i, k) => (pre[i + 1] - pre[i + 1 - k]) / k;
+  const ema = k => { const a = 2 / (k + 1), out = [c[0]]; for (let i = 1; i < n; i++) out.push(out[i - 1] + a * (c[i] - out[i - 1])); return out; };
+  const e12 = ema(12), e26 = ema(26), macd = e12.map((x, i) => x - e26[i]), sig = [macd[0]];
+  for (let i = 1; i < n; i++) sig.push(sig[i - 1] + 0.2 * (macd[i] - sig[i - 1]));
+  const rsi = Array(n).fill(50);
+  let gain = 0, loss = 0;
+  for (let i = 1; i < n; i++) { // Wilder's RSI(14)
+    const d = c[i] - c[i - 1], g = Math.max(d, 0), l = Math.max(-d, 0);
+    if (i <= 14) { gain += g / 14; loss += l / 14; } else { gain = (gain * 13 + g) / 14; loss = (loss * 13 + l) / 14; }
+    if (i >= 14) rsi[i] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  }
+  const lr = c.map((x, i) => (i ? Math.log(x / c[i - 1]) : 0));
+  const vol = i => sd(lr.slice(i - 59, i + 1)) || 0.02; // 60-day daily sigma
+  // Each factor is scaled to -1..+1 in units of the stock's own volatility, so quiet and wild stocks compare fairly.
+  const feats = i => {
+    const s = vol(i), s50 = sma(i, 50), s200 = sma(i, 200);
+    return {
+      trend: clamp((c[i] / s50 - 1) / (s * 8), -1, 1),
+      regime: clamp((s50 / s200 - 1) / (s * 12), -1, 1),
+      momentum: clamp(Math.log(c[i] / c[i - 20]) / (s * Math.sqrt(20) * 2), -1, 1),
+      rsi: rsi[i] > 70 ? -(rsi[i] - 70) / 30 : rsi[i] < 30 ? (30 - rsi[i]) / 30 : 0, // stretched readings tend to snap back
+      macd: clamp((macd[i] - sig[i]) / (c[i] * s), -1, 1),
+    };
+  };
+  const W = { trend: 0.25, regime: 0.15, momentum: 0.25, rsi: 0.15, macd: 0.2 };
+  const tech = f => Object.keys(W).reduce((t, k) => t + W[k] * f[k], 0);
+
+  let hits = 0, samples = 0; // walk the past year: how often did this exact signal call the next h days right?
+  for (let i = 200; i < n - h; i++) {
+    const t = tech(feats(i));
+    if (Math.abs(t) < 0.1) continue;
+    samples++;
+    if (c[i + h] > c[i] === t > 0) hits++;
+  }
+  const hitRate = samples >= 30 ? hits / samples : null;
+
+  const f = feats(n - 1), t = tech(f), dailySigma = vol(n - 1), sigma = dailySigma * Math.sqrt(h);
+  const lex = sent && sent.count >= 3 ? sent.score / 100 : null;
+  const news = lex != null && av ? (lex + av.score) / 2 : lex ?? av?.score ?? null;
+  const combined = news == null ? t : 0.7 * t + 0.3 * news;
+  const reliability = hitRate == null ? 0.4 : clamp((hitRate - 0.5) / 0.1, 0.15, 1);
+  const drift = clamp(mean(lr.slice(-250)) * h, -0.25 * sigma, 0.25 * sigma);
+  const expRet = drift + combined * 0.6 * reliability * sigma;
+  const pUp = clamp(normCdf(expRet / sigma), 0.2, 0.8);
+  const s50 = sma(n - 1, 50), s200 = sma(n - 1, 200), r = rsi[n - 1];
+  // Volatility with one-off shock days clipped, so a single earnings gap does not pass for the normal daily range.
+  const recent = lr.slice(-60), mid = a => a.slice().sort((x, y) => x - y)[a.length >> 1], med = mid(recent);
+  const mad = mid(recent.map(x => Math.abs(x - med))) * 1.4826 || dailySigma;
+  const robustSigma = sd(recent.map(x => clamp(x, med - 3 * mad, med + 3 * mad)));
+  return {
+    horizon: h, last, pUp, verdict: pUp >= 0.55 ? 'Up' : pUp <= 0.45 ? 'Down' : 'No clear edge',
+    expRet, sigma, dailySigma, robustSigma, low: last * Math.exp(expRet - sigma), high: last * Math.exp(expRet + sigma), hitRate, samples,
+    factors: [
+      { name: 'Price vs 50-day average', v: f.trend, note: `${(Math.abs(last / s50 - 1) * 100).toFixed(1)}% ${last >= s50 ? 'above' : 'below'}` },
+      { name: '50-day vs 200-day trend', v: f.regime, note: s50 >= s200 ? 'uptrend' : 'downtrend' },
+      { name: '20-day momentum', v: f.momentum, note: pct(last / c[n - 21] - 1) },
+      { name: 'RSI (14)', v: f.rsi, note: `${r.toFixed(0)} · ${r > 70 ? 'overbought' : r < 30 ? 'oversold' : 'neutral'}` },
+      { name: 'MACD', v: f.macd, note: macd[n - 1] >= sig[n - 1] ? 'above its signal line' : 'below its signal line' },
+      { name: 'News sentiment', v: news ?? 0, note: news == null ? 'too few headlines' : `${sent?.label || 'scored'}${av ? ' · two sources' : ''}` },
+      { name: 'Long-run drift', v: clamp(drift / (0.25 * sigma), -1, 1), note: `${pct(Math.exp(mean(lr.slice(-250)) * 252) - 1, 0)} a year` },
+    ],
+  };
+}
+
+// ---------- Options: which contracts should gain value over the forecast window? ----------
+
+// Black-Scholes with zero rates. We only ever compare model value to model value, so carry cancels out.
+function bs(S, K, T, sigma, call) {
+  if (T <= 0 || sigma <= 0) return Math.max(call ? S - K : K - S, 0);
+  const v = sigma * Math.sqrt(T), d1 = Math.log(S / K) / v + v / 2, d2 = d1 - v;
+  return call ? S * normCdf(d1) - K * normCdf(d2) : K * normCdf(-d2) - S * normCdf(-d1);
+}
+
+// For every contract: expected value after the holding period, averaged over the forecast's price
+// distribution, versus its value today. Green = expected to be worth more; red = time decay wins.
+function markOptions(contracts, fc, exp, now = Date.now()) {
+  const S0 = fc.last, daysLeft = Math.max(0.5, (Date.parse(exp + 'T21:00:00Z') - now) / DAY);
+  const hold = Math.min((fc.horizon * 7) / 5, daysLeft), tradingDays = (hold * 5) / 7;
+  const T = daysLeft / 365, after = (daysLeft - hold) / 365;
+  const m = (fc.expRet * tradingDays) / fc.horizon;
+  const sane = c => c.iv > 0.01 && c.iv < 5;
+  const atmIv = contracts.filter(sane).sort((a, b) => Math.abs(a.strike - S0) - Math.abs(b.strike - S0))[0]?.iv || fc.dailySigma * Math.sqrt(252);
+  // Expected volatility over the holding period: half what the option market implies, half what the stock has actually been doing.
+  const s = Math.sqrt((0.5 * atmIv ** 2) / 252 + 0.5 * (fc.robustSigma || fc.dailySigma) ** 2) * Math.sqrt(tradingDays);
+  const grid = [];
+  for (let z = -4; z <= 4.001; z += 0.25) grid.push([z, Math.exp((-z * z) / 2)]);
+  const wsum = grid.reduce((a, g) => a + g[1], 0);
+  const rows = new Map();
+  for (const c of contracts) {
+    const iv = sane(c) ? c.iv : atmIv, call = c.type === 'C', today = bs(S0, c.strike, T, iv, call);
+    let ev = 0;
+    for (const [z, w] of grid) ev += w * bs(S0 * Math.exp(m + s * z), c.strike, after, iv, call);
+    const change = today > 0.005 ? ev / wsum / today - 1 : null; // effectively worthless: nothing to gain
+    const row = rows.get(c.strike) || { strike: c.strike };
+    row[call ? 'call' : 'put'] = {
+      mid: c.bid > 0 && c.ask > 0 ? (c.bid + c.ask) / 2 : c.last || null, iv: sane(c) ? c.iv : null, delta: c.delta ?? null,
+      vol: c.vol || 0, oi: c.oi || 0, change, up: change != null && change > 0,
+    };
+    rows.set(c.strike, row);
+  }
+  return { holdDays: Math.max(1, Math.round(tradingDays)), daysToExpiry: Math.round(daysLeft), atmIv, rows: [...rows.values()].sort((a, b) => a.strike - b.strike) };
+}
+
+module.exports = { iso, daysBetween, pct, clamp, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar, forecast, bs, markOptions };
