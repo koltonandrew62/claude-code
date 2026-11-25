@@ -16,6 +16,7 @@ import pandas as pd
 
 import account_longer as al
 import backtest as b
+import breakout_lab as lab
 import quant as q
 
 START, GOAL, YEARS = 1600.0, 3_200_000.0, 10
@@ -108,6 +109,14 @@ def main():
         ("Breakout only, if the real edge is half of what was measured", brk.ret.to_numpy() - brk.ret.mean() / 2, len(brk) / span_years),
         ("Breakout only, if there is no real edge", brk.ret.to_numpy() - brk.ret.mean(), len(brk) / span_years),
     ]
+    imp, _ = lab.improved_trades()
+    fresh, _ = lab.improved_trades(lab.NEW_ETFS + lab.NEW_STOCKS)
+    imp_ret, fresh_ret = (imp.opt_net / imp.cost_basis).to_numpy(), (fresh.opt_net / fresh.cost_basis).to_numpy()
+    scenarios += [
+        ("Improved breakout (puts, market confirmed), exactly as measured", imp_ret, len(imp) / span_years),
+        ("Improved breakout, with the edge seen on 13 symbols it was not found on", fresh_ret, len(imp) / span_years),
+        ("Improved breakout, as measured but without its three best trades", np.sort(imp_ret)[:-3], len(imp) / span_years),
+    ]
     rows = []
     for label, rets, per_year in scenarios:
         for bet in BET_SIZES:
@@ -144,8 +153,8 @@ def build(per, ledger, end_all, proj, span_years):
         ("Starting balance ($)", START, MONEY, "Set by you."),
         ("Goal ($)", GOAL, MONEY, "Set by you."),
         ("Years", YEARS, "0", "Set by you."),
-        ("Best simulated account: ending balance ($)", 2664.30, MONEY,
-         "Breakout, no target, from LongerHoldAccount.xlsx. Started at $1,600."),
+        ("Best simulated account: ending balance ($)", 2886.60, MONEY,
+         "Improved breakout (puts only, market confirmed), from BreakoutPutsAccount.xlsx. Started at $1,600."),
         ("Best simulated account: years covered", round(span_years, 2), "0.00",
          "500 trading days of hourly bars, 2024-11-27 to 2026-11-25."),
     ]

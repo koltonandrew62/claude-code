@@ -1,14 +1,16 @@
 # ScalpCallPut: thinkorswim option day-trade signals, and what the backtests say
 
-**Result up front: one setup made money in testing, on a small sample. Pushing its win rate to 60% removed the profit.**
+**Result up front: the breakout rule got better by dropping calls and waiting for the wider market to confirm. It is still a small-sample result.**
 
-- **Hourly breakout, no target ($1,600 account):** turned $1,600 into $2,664.30 over two years of simulated trades (49 trades, 45% winners). Its three best trades made more than the whole profit, so this is a lead to keep testing, not a proven edge.
-- **Same rule tuned for a win rate over 60%:** selling at a quick target won 62-63% of all signals, and 59% of the trades the account could actually take. That account ended at $1,525.80, a loss of $74.20.
+- **Improved breakout (puts only, market confirmed), $1,600 account:** 18 trades in two years, 61% winners, $1,600 to $2,886.60, largest drop 14.4%. Three trades made almost all of that profit.
+- **Why puts only:** on 13 stocks and ETFs the rule had never seen, calls lost $35.67 a trade over 149 trades. That is the most reliable finding in this whole project.
+- **Original breakout, no target:** 45% winners, $1,600 to $2,664.30.
+- **Breakout with a quick target (over 60% winners):** roughly break-even; the account lost $74.20.
 - **Quant model (math and pattern matching on 14 years of daily data):** called the day's direction right 52% of the time on unseen years. Buying calls and puts on it lost at every setting.
 - **1-minute scalp, $50 account:** eight rules, 96 settings, none profitable. The account lost $312.30 over 91 trades.
 - **Changing rules whenever one loses** made things worse both times.
 - **Using every strategy at once** took $1,600 to $252 in two years.
-- **$1,600 to $3.2 million in ten years** needs 114% growth every year. The best account here grew 29% a year, which reaches about $21,000.
+- **$1,600 to $3.2 million in ten years** needs 114% growth every year. The best account here grew 35% a year, which reaches about $31,500.
 
 Only calls and puts are ever bought; nothing is sold short. All trades are simulated with modelled option prices. Nothing here is a reason to trade real money yet.
 
@@ -17,16 +19,68 @@ Only calls and puts are ever bought; nothing is sold short. All trades are simul
 | File | What it is |
 | --- | --- |
 | `ScalpCallPut_STRATEGY.ts` | The thinkScript strategy: eight selectable rules, CALL / PUT / SELL bubbles, status labels |
-| `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds (three versions) |
+| `BreakoutPutsAccount.xlsx` | The made-up $1,600 account trading the improved breakout rule |
+| `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds (three earlier versions) |
 | `ScalpAccount.xlsx` | The made-up $50 account with the 1-minute scalp |
 | `TenYearPlan.xlsx` | What $1,600 to $3.2 million requires, the every-strategy account, and ten-year projections |
 | `backtest/backtest.py` | Python backtest that re-prices every signal as an option |
 | `backtest/research.py` | Scores every rule on training days and on held-back days |
 | `backtest/quant.py` | The quant model: regression plus pattern matching on daily bars, refitted every year |
 | `backtest/ten_year.py` | The every-strategy account and the ten-year projections |
+| `backtest/breakout_lab.py` | Tests the breakout rule on new symbols, scores refinements, writes the improved account |
 | `backtest/account_longer.py`, `backtest/account.py` | Simulate the two accounts and write the spreadsheets |
 | `backtest/fetch_data.py` | Downloads the bars from Yahoo Finance |
 | `backtest/data/`, `backtest/results/` | The bars used, and the reports and trade lists |
+
+## Making the breakout better (`backtest/breakout_lab.py`)
+
+Tuning further on SPY, QQQ and IWM would only fit noise, because those results have been looked at many times.
+So the rule was first run, unchanged, on 13 symbols it had never seen (DIA, XLF, XLK, XLE, SMH, AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD), same two years of hourly bars.
+
+| On the 13 new symbols | Trades | Win rate | Average per trade |
+| --- | ---: | ---: | ---: |
+| Rule as it stood | 323 | 32.5% | -$14.06 |
+| Its calls | 149 | 25.5% | -$35.67 |
+| Its puts | 174 | 38.5% | $4.45 |
+| Its puts on the 5 ETFs | 69 | 46.4% | $24.50 |
+| Its puts on the 8 stocks | 105 | 33.3% | -$8.73 |
+
+As it stood, the rule did not carry over. The split explains why: after a break to new highs the price did not keep going, while after a break to new lows it did (about 20 to 30 hundredths of a percent further on average, on both the old and the new symbols).
+
+Refinements, each scored on the original training days, the original held-back days, and the 13 new symbols:
+
+| Version | Training | Held back | New symbols |
+| --- | ---: | ---: | ---: |
+| As it stood | 52.4%, $41.69 | 40.7%, $24.24 | 32.5%, -$14.06 |
+| Puts only | 62.5%, $82.29 | 43.5%, $37.35 | 38.5%, $4.45 |
+| Calls only | 38.9%, -$12.45 | 25.0%, -$51.12 | 25.5%, -$35.67 |
+| With the daily trend only | 48.0%, $10.96 | 40.0%, $11.77 | 30.7%, -$15.04 |
+| 2x volume instead of 1.5x | 47.1%, $76.37 | 77.8%, $116.83 | 35.6%, -$9.67 |
+| **Puts only, wider market also at a 30-bar low** | 75.0%, $98.41 | 53.3%, $66.49 | 48.7%, $30.65 |
+
+Each cell is win rate, then average per trade. The last row is the improved rule: a put signal only counts when SPY (or QQQ, on a SPY chart) is below its own 30-bar low on the same bar.
+Puts taken without that confirmation lost $17.81 a trade on the new symbols.
+
+### The improved rule in a $1,600 account (`BreakoutPutsAccount.xlsx`)
+
+SPY, QQQ and IWM, same account rules as before.
+
+| | As it stood | Puts only | Puts only, market confirmed |
+| --- | ---: | ---: | ---: |
+| Trades | 49 | 31 | 18 |
+| Win rate | 44.9% | 45.2% | 61.1% |
+| Net result | +$937.30 | +$1,184.70 | +$1,286.60 |
+| Largest drop from a high | 33.7% | 28.3% | 14.4% |
+| Net on the last 170 days | +$206 | +$410 | +$550 |
+
+What to keep in mind:
+
+- **Three trades are the profit.** The three largest winners made $1,283 of the $1,286.60. The other 15 trades netted about zero.
+- **Nine trades a year.** That is very few to judge anything by.
+- **The confirmation idea came from this same data.** Dropping calls was tested on untouched symbols; the market filter was found by studying these two years and has not had a clean test.
+- **It is a bet on selloffs.** It makes money when the market breaks down and sits idle otherwise.
+- **Small details move the result.** When several ETFs signal in the same hour the account can only take one, and which one it takes changed an eight-ETF version of this account from +$1,268 to -$224. (The "as it stood" figure here differs from the $1,064.30 in `LongerHoldAccount.xlsx` for the same reason.)
+- **Stocks are modelled more roughly** than ETFs, using the VIX scaled by how much each stock moves, so the stock rows are less reliable.
 
 ## The $3.2 million goal (`TenYearPlan.xlsx`)
 
@@ -35,9 +89,9 @@ Turning $1,600 into $3.2 million in ten years means multiplying it 2,000 times: 
 | | Yearly growth | After ten years |
 | --- | ---: | ---: |
 | What the goal needs | 113.8% | $3,200,000 |
-| Best simulated account here (breakout, no target) | 29.4% | $21,019 |
+| Best simulated account here (improved breakout) | 34.7% | $31,506 |
 
-At the best account's rate the goal takes about 30 years, and that assumes its best two years repeat forever.
+At the best account's rate the goal takes about 25 years, and that assumes its best two years repeat forever.
 
 ### Using every strategy at once
 
@@ -71,6 +125,11 @@ Each row replays ten years 20,000 times by drawing at random from the simulated 
 | Breakout, edge as on the unseen days | 25% | $18,612 | 0.8% | 10.5% |
 | Breakout, edge as on the unseen days | 50% | bust | 4.6% | 58.0% |
 | Breakout, no real edge | 25% | bust | 0% | 74.2% |
+| Improved breakout, edge exactly as measured | 25% | $4,265,584 | 57.5% | 0% |
+| Improved breakout, edge as on the 13 other symbols | 25% | $22,045 | 0% | 0.1% |
+| Improved breakout, edge as on the 13 other symbols | 50% | $71,198 | 5.7% | 7.3% |
+
+The "exactly as measured" rows are not forecasts. The improved rule's row rests on 31 signals from the same two years the rule was shaped on, and that sample contains no trade that lost its whole premium, so the replay cannot go bust the way a real account can.
 
 The goal only shows up when two things are both assumed: the breakout edge is exactly as large as its best two-year measurement, and a quarter to half of the account is bet on every trade for ten years.
 The measurement is far too uncertain for that. With the smaller edge seen on the unseen days, the same bet sizes reach the goal in under 5% of paths and wipe the account out in 10% to 58% of them.
@@ -289,7 +348,7 @@ Across every target and stop tested (`backtest/results/grid_5m.txt`) no setting 
 ## Running it in thinkorswim
 
 1. Charts > Studies > Edit Studies > Strategies tab > Create. Paste `ScalpCallPut_STRATEGY.ts`, name it, OK.
-2. For the longer-hold setup use a 1-hour chart of SPY, QQQ or IWM; the script's defaults match the no-target version, and setting `quickTarget` to yes switches to the over-60% version. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
+2. Use a 1-hour chart of SPY, QQQ or IWM; the script's defaults are the improved breakout (puts only, market confirmed). Set `confirmSymbol` to QQQ on a SPY chart and to SPY on any other chart. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
 3. Right-click an order arrow > Show Report for the underlying P&L.
 4. To test with real historical option prices, use **OnDemand** (top right of the main window). It replays past sessions with the option chain as it traded, on a simulated account. Follow the bubbles and place the trades by hand.
 5. For live paper trading, log in to paperMoney and set the balance to $1,600 from the account adjustment option on the Monitor tab.
@@ -310,6 +369,14 @@ python3 backtest/research.py hourly60
 
 ```bash
 python3 backtest/quant.py
+```
+
+```bash
+python3 backtest/breakout_lab.py
+```
+
+```bash
+python3 backtest/breakout_lab.py account
 ```
 
 ```bash

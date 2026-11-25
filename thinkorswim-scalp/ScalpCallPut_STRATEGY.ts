@@ -20,15 +20,19 @@
 #   RSI2        with the trend, RSI(2) washout then a bar back in the trend's favour
 #   Exhaustion  fade three straight bars that travelled at least 2.5 ATR
 #
-# Defaults: the longer-hold setup for a $1,600 account. 1-HOUR chart, Breakout
-#   rule, stop 1.5 ATR, no target, sell after 4 bars, contract about 5 trading
-#   days from expiry costing $4.00 or less. This is the only setup that made
-#   money in the option backtest, on a small sample. It won about 45% of trades.
-# Higher win rate: set quickTarget to yes. It sells at +0.5 ATR or after 2
-#   bars and won about 60% of trades, but made little or nothing overall.
+# Defaults: the improved breakout for a $1,600 account. 1-HOUR chart, Breakout
+#   rule, PUTS ONLY, and only when the wider market (confirmSymbol) is also
+#   below its own 30-bar low. Stop 1.5 ATR, no target, sell after 4 bars,
+#   contract about 5 trading days from expiry costing $4.00 or less.
+#   In the option backtest this won about 60% of a small number of trades
+#   (about 9 a year), and three trades made nearly all the profit.
+#   Set confirmSymbol to QQQ on a SPY chart and to SPY on any other chart.
+# Higher win rate still: set quickTarget to yes. It sells at +0.5 ATR or after
+#   2 bars; it made little or nothing overall when tested without confirmation.
 #   See README.md.
 # 1-minute scalp: 1-minute chart, startTime 0935, endTime 1550, flatTime 1555,
-#   targetATR 2.0, stopATR 1.0, maxBars 5. It lost money in the backtest.
+#   targetATR 2.0, stopATR 1.0, maxBars 5, tradeCalls yes, useMarketConfirm no.
+#   It lost money in the backtest.
 #
 # thinkorswim strategies simulate trades on the chart symbol, not on options.
 # The orders below therefore show the underlying move; the option to buy is the
@@ -42,8 +46,10 @@ input targetATR = 99.0;      # profit target in ATRs of the underlying; 50 or mo
 input stopATR = 1.5;         # stop, in ATRs of the underlying
 input maxBars = 4;           # time limit, in bars
 input quickTarget = no;      # yes = sell at +0.5 ATR or after 2 bars, with a 3 ATR stop (ignores the three inputs above)
-input tradeCalls = yes;
+input tradeCalls = no;       # calls lost money on every set of symbols tested
 input tradePuts = yes;
+input useMarketConfirm = yes; # only signal when the wider market is at a 30-bar extreme too
+input confirmSymbol = "QQQ";  # use QQQ on a SPY chart, and SPY on every other chart
 input fastLength = 9;
 input slowLength = 21;
 input atrLength = 14;
@@ -123,8 +129,12 @@ case Exhaustion:
     putRule = greenBar and greenBar[1] and greenBar[2] and -threeBarDrop >= 2.5 * atrValue[3];
 }
 
-def callSetup = inWindow and tradeCalls and callRule;
-def putSetup = inWindow and tradePuts and putRule;
+def confirmClose = close(symbol = confirmSymbol);
+def marketBreakDown = confirmClose < Lowest(low(symbol = confirmSymbol)[1], 30);
+def marketBreakUp = confirmClose > Highest(high(symbol = confirmSymbol)[1], 30);
+
+def callSetup = inWindow and tradeCalls and callRule and (!useMarketConfirm or marketBreakUp);
+def putSetup = inWindow and tradePuts and putRule and (!useMarketConfirm or marketBreakDown);
 
 # ------------------------------------------------------------- position state
 # position:  1 = holding the call side, -1 = holding the put side, 0 = flat,

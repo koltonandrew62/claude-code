@@ -1,0 +1,23 @@
+# Step 1: the rule as it stands, on symbols it has never seen
+           group   n  win%   avg$     t  total$
+  13 new symbols 323  32.5 -14.06 -2.12 -4540.0
+        new ETFs 113  40.7   8.17  1.08   923.0
+      new stocks 210  28.1 -26.01 -2.81 -5463.0
+           calls 149  25.5 -35.67 -6.20 -5315.0
+            puts 174  38.5   4.45  0.40   774.0
+  first 330 days 199  34.2  -9.35 -1.12 -1860.0
+   last 170 days 124  29.8 -21.61 -1.99 -2680.0
+symbol   AAPL     AMD   AMZN   DIA  GOOGL    META    MSFT   NVDA    SMH    TSLA    XLE    XLF    XLK
+n        31.0    30.0   23.0  24.0   29.0    24.0    23.0   24.0   27.0    26.0   17.0   23.0   22.0
+avg     -19.6   -56.3  -40.7  -0.3  -23.0   -66.8   -43.5  -31.7   23.9    69.2   -6.0   -5.4   23.3
+total  -606.6 -1689.3 -936.2  -7.4 -666.4 -1603.9 -1000.0 -759.9  644.5  1799.3 -102.5 -123.4  511.6
+
+# Step 2: refinements, each scored three ways
+                                     variant  train_n  train_win%  train_avg$  held_n  held_win%  held_avg$  new_n  new_win%  new_avg$  new_t
+                                As it stands       42        52.4       41.69      27       40.7      24.24    323      32.5    -14.06  -2.12
+                                   Puts only       24        62.5       82.29      23       43.5      37.35    174      38.5      4.45   0.40
+                                  Calls only       18        38.9      -12.45       4       25.0     -51.12    149      25.5    -35.67  -6.20
+                   With the daily trend only       25        48.0       10.96      15       40.0      11.77    212      30.7    -15.04  -1.81
+             Puts only, in a daily downtrend        8        75.0       62.82      13       46.2      29.52    101      38.6      7.28   0.46
+                   2x volume instead of 1.5x       17        47.1       76.37       9       77.8     116.83    132      35.6     -9.67  -0.85
+Puts only, wider market also at a 30-bar low       16        75.0       98.41      15       53.3      66.49     76      48.7     30.65   1.77
