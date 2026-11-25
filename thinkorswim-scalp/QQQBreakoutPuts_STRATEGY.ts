@@ -70,18 +70,18 @@ def putSetup = inWindow
     and marketBreakDown;
 
 # ------------------------------------------------------------- position state
-# inPut is 1 while the put is still held after the current bar has finished.
+# putOpen is 1 while the put is still held after the current bar has finished.
 # barsHeld counts the bars of the current trade, including the bar it is sold on.
-def inPut;
+def putOpen;
 def tradeEntry;
 def entryATR;
 def barsHeld;
-if (inPut[1] == 1) {
+if (putOpen[1] == 1) {
     # a put was carried into this bar
     tradeEntry = tradeEntry[1];
     entryATR = entryATR[1];
     barsHeld = barsHeld[1] + 1;
-    inPut = if high >= tradeEntry[1] + stopATR * entryATR[1]
+    putOpen = if high >= tradeEntry[1] + stopATR * entryATR[1]
             or low <= tradeEntry[1] - targetATR * entryATR[1]
             or barsHeld[1] + 1 >= maxBars
             or flatBar
@@ -92,7 +92,7 @@ if (inPut[1] == 1) {
         tradeEntry = open;
         entryATR = atrValue[1];
         barsHeld = 1;
-        inPut = if high >= open + stopATR * atrValue[1]
+        putOpen = if high >= open + stopATR * atrValue[1]
                 or low <= open - targetATR * atrValue[1]
                 or maxBars <= 1
                 or flatBar
@@ -101,7 +101,7 @@ if (inPut[1] == 1) {
         tradeEntry = 0;
         entryATR = 0;
         barsHeld = 0;
-        inPut = 0;
+        putOpen = 0;
     }
 }
 
@@ -116,7 +116,7 @@ def timeExit = holdPut and !stopHit and !targetHit and (barsHeld >= maxBars or f
 def putExit = stopHit or targetHit or timeExit;
 def barsLeft = maxBars - barsHeld;
 
-def putSignal = putSetup and inPut == 0;
+def putSignal = putSetup and putOpen == 0;
 
 # -------------------------------------------------------------------- orders
 # These four lines only work when the script is saved under the STRATEGIES tab.
@@ -142,12 +142,12 @@ AddLabel(putExit,
 # Status label: always shown.
 AddLabel(yes,
     if putSignal then "BUY PUT  (enter next bar)"
-    else if inPut == 1 then "IN PUT - HOLD   sell if price falls to " + Round(putTarget, 2)
+    else if putOpen == 1 then "IN PUT - HOLD   sell if price falls to " + Round(putTarget, 2)
         + " or rises to " + Round(putStop, 2) + "   bars left: " + barsLeft
     else if putExit then "NO POSITION after this sale"
     else if !inWindow then "NO TRADE  (outside trading window)"
     else "NO TRADE  (waiting for setup)",
-    if putSignal or inPut == 1 then Color.RED else Color.GRAY);
+    if putSignal or putOpen == 1 then Color.RED else Color.GRAY);
 
 AddLabel(yes,
     if marketBreakDown then "Market confirm: breaking down" else "Market confirm: not breaking down",
@@ -162,11 +162,11 @@ plot BreakoutLow = priorLow;
 BreakoutLow.SetDefaultColor(Color.MAGENTA);
 BreakoutLow.SetStyle(Curve.SHORT_DASH);
 
-plot TargetLevel = if showLevels and inPut == 1 then putTarget else Double.NaN;
+plot TargetLevel = if showLevels and putOpen == 1 then putTarget else Double.NaN;
 TargetLevel.SetDefaultColor(Color.GREEN);
 TargetLevel.SetPaintingStrategy(PaintingStrategy.HORIZONTAL);
 
-plot StopLevel = if showLevels and inPut == 1 then putStop else Double.NaN;
+plot StopLevel = if showLevels and putOpen == 1 then putStop else Double.NaN;
 StopLevel.SetDefaultColor(Color.RED);
 StopLevel.SetPaintingStrategy(PaintingStrategy.HORIZONTAL);
 
