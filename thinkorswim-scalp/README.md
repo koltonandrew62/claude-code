@@ -7,6 +7,8 @@
 - **Quant model (math and pattern matching on 14 years of daily data):** called the day's direction right 52% of the time on unseen years. Buying calls and puts on it lost at every setting.
 - **1-minute scalp, $50 account:** eight rules, 96 settings, none profitable. The account lost $312.30 over 91 trades.
 - **Changing rules whenever one loses** made things worse both times.
+- **Using every strategy at once** took $1,600 to $252 in two years.
+- **$1,600 to $3.2 million in ten years** needs 114% growth every year. The best account here grew 29% a year, which reaches about $21,000.
 
 Only calls and puts are ever bought; nothing is sold short. All trades are simulated with modelled option prices. Nothing here is a reason to trade real money yet.
 
@@ -17,12 +19,63 @@ Only calls and puts are ever bought; nothing is sold short. All trades are simul
 | `ScalpCallPut_STRATEGY.ts` | The thinkScript strategy: eight selectable rules, CALL / PUT / SELL bubbles, status labels |
 | `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds (three versions) |
 | `ScalpAccount.xlsx` | The made-up $50 account with the 1-minute scalp |
+| `TenYearPlan.xlsx` | What $1,600 to $3.2 million requires, the every-strategy account, and ten-year projections |
 | `backtest/backtest.py` | Python backtest that re-prices every signal as an option |
 | `backtest/research.py` | Scores every rule on training days and on held-back days |
 | `backtest/quant.py` | The quant model: regression plus pattern matching on daily bars, refitted every year |
+| `backtest/ten_year.py` | The every-strategy account and the ten-year projections |
 | `backtest/account_longer.py`, `backtest/account.py` | Simulate the two accounts and write the spreadsheets |
 | `backtest/fetch_data.py` | Downloads the bars from Yahoo Finance |
 | `backtest/data/`, `backtest/results/` | The bars used, and the reports and trade lists |
+
+## The $3.2 million goal (`TenYearPlan.xlsx`)
+
+Turning $1,600 into $3.2 million in ten years means multiplying it 2,000 times: 113.8% growth every year, or 6.5% every month, for 120 months.
+
+| | Yearly growth | After ten years |
+| --- | ---: | ---: |
+| What the goal needs | 113.8% | $3,200,000 |
+| Best simulated account here (breakout, no target) | 29.4% | $21,019 |
+
+At the best account's rate the goal takes about 30 years, and that assumes its best two years repeat forever.
+
+### Using every strategy at once
+
+One account taking every signal from all seven hourly rules and the quant model, about 5% of the balance per trade:
+
+| Strategy | Signals in two years | Win rate | Average per trade | Total, one contract per signal |
+| --- | ---: | ---: | ---: | ---: |
+| Breakout | 69 | 47.8% | $34.86 | +$2,405 |
+| RSI2 | 152 | 30.3% | $9.89 | +$1,503 |
+| Burst | 80 | 42.5% | $6.03 | +$483 |
+| ORB | 359 | 37.3% | -$12.54 | -$4,502 |
+| BandFade | 142 | 26.1% | -$27.50 | -$3,905 |
+| Exhaustion | 185 | 29.7% | -$26.97 | -$4,990 |
+| Quant model | 122 | 30.3% | -$46.90 | -$5,722 |
+| Pullback | 482 | 31.5% | -$20.60 | -$9,929 |
+
+The combined account took 316 trades and fell from $1,600 to $252, at which point it could no longer afford a contract.
+Five of the eight strategies lose, and they fire far more often than the three that do not. RSI2 and Burst were positive over the full two years but lost on the held-back days.
+
+### Ten-year projections
+
+Each row replays ten years 20,000 times by drawing at random from the simulated trades, betting a fixed share of the balance on every trade.
+
+| Scenario | Bet per trade | Middle outcome | Paths reaching $3.2 million | Paths going bust |
+| --- | ---: | ---: | ---: | ---: |
+| Every strategy together | any | bust | 0% | 100% |
+| Breakout, edge exactly as measured | 10% | $41,111 | 0% | 0% |
+| Breakout, edge exactly as measured | 25% | $1,628,685 | 36.2% | 0.1% |
+| Breakout, edge exactly as measured | 50% | $49,676,473 | 76.6% | 4.9% |
+| Breakout, edge as on the unseen days | 10% | $7,359 | 0% | 0% |
+| Breakout, edge as on the unseen days | 25% | $18,612 | 0.8% | 10.5% |
+| Breakout, edge as on the unseen days | 50% | bust | 4.6% | 58.0% |
+| Breakout, no real edge | 25% | bust | 0% | 74.2% |
+
+The goal only shows up when two things are both assumed: the breakout edge is exactly as large as its best two-year measurement, and a quarter to half of the account is bet on every trade for ten years.
+The measurement is far too uncertain for that. With the smaller edge seen on the unseen days, the same bet sizes reach the goal in under 5% of paths and wipe the account out in 10% to 58% of them.
+
+Also left out, all of which make it harder: taxes on each year's gains, worse fills once positions run to hundreds of contracts, and the fact that one contract already costs about 22% of $1,600, so small bet sizes are not available at the start.
 
 ## The callouts
 
@@ -257,6 +310,10 @@ python3 backtest/research.py hourly60
 
 ```bash
 python3 backtest/quant.py
+```
+
+```bash
+python3 backtest/ten_year.py
 ```
 
 ```bash
