@@ -18,6 +18,12 @@ node server.js
 
 Then open http://localhost:4173. Requires Node 20 or newer.
 
+For a desktop shortcut that starts the app and opens it in your browser, run this once:
+
+```bash
+node shortcut.js
+```
+
 The SEC asks automated clients to identify themselves. Before heavy use, set your own contact string:
 
 ```bash

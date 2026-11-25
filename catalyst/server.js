@@ -12,6 +12,7 @@ const jets = require('./lib/jets');
 const universes = require('./lib/universes');
 
 const PORT = +process.env.PORT || 4173;
+const URL_HOME = `http://localhost:${PORT}`;
 const PUB = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const TICKER = /^[A-Z0-9]{1,6}([.-][A-Z]{1,2})?$/;
@@ -63,4 +64,15 @@ http.createServer(async (req, res) => {
     json(res, e.status || 500, { error: e.status ? e.message : 'Something went wrong on the server' });
     if (!e.status) console.error(e);
   }
-}).listen(PORT, '127.0.0.1', () => console.log(`Catalyst is running at http://localhost:${PORT}`));
+}).on('error', e => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.log(`Port ${PORT} is already in use — Catalyst is probably already running at ${URL_HOME}`);
+  openBrowser(); // a second double-click on the shortcut just brings the app up again
+}).listen(PORT, '127.0.0.1', () => { console.log(`Catalyst is running at ${URL_HOME}`); openBrowser(); });
+
+// `--open` (used by the desktop shortcut) also opens the app in your default browser.
+function openBrowser() {
+  if (!process.argv.includes('--open')) return;
+  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', URL_HOME]] : [process.platform === 'darwin' ? 'open' : 'xdg-open', [URL_HOME]];
+  require('child_process').spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+}
