@@ -6,6 +6,7 @@ back and looked at once, to see whether the pick survives data it never saw.
     python3 research.py scalp     1-minute bars, 3-5 bar holds, $50 account
     python3 research.py longer    5-minute bars, 30-minute to 4-hour holds, $1,600 account
     python3 research.py hourly    hourly bars over two years, $1,600 account
+    python3 research.py hourly60  the same, hunting for settings that win over 60% of trades
 """
 import itertools
 import sys
@@ -32,6 +33,10 @@ PRESETS = {
     "hourly": dict(interval="1h", train_days=330, targets=[2.0, 4.0, 99.0], stops=[1.5, 3.0], holds=[1, 2, 3, 4],
                    contracts=[b.Costs(premium_cap=4.0), b.Costs(premium_cap=4.0, dte=5, slippage=0.02)],
                    out="results/research_1h_longer.csv"),
+    # Hunt for a win rate above 60%: same hourly data, closer profit targets, wide or no stop.
+    "hourly60": dict(interval="1h", train_days=330, targets=[0.5, 1.0, 1.5], stops=[3.0, 99.0], holds=[2, 4],
+                     contracts=[b.Costs(premium_cap=4.0, dte=5, slippage=0.02), b.Costs(premium_cap=4.0, dte=20, slippage=0.02)],
+                     out="results/research_1h_win60.csv", min_win=60.0),
 }
 
 
@@ -77,6 +82,14 @@ def main():
     res = pd.DataFrame(rows).round(2)
     res.to_csv(cfg["out"], index=False)
     ok = res[res.train_n >= MIN_TRAIN_TRADES]
+    if "min_win" in cfg:
+        hi = ok[ok["train_win%"] >= cfg["min_win"]].sort_values("train_exp$", ascending=False)
+        kept = hi[(hi["test_win%"] >= cfg["min_win"]) & (hi["test_exp$"] > 0)]
+        print(f"\n## Settings that won at least {cfg['min_win']:.0f}% of trades in training, best training result first")
+        print(hi.to_string(index=False))
+        print(f"\n{len(hi)} of {len(res)} settings won at least {cfg['min_win']:.0f}% in training. On the held-back days "
+              f"{(hi['test_win%'] >= cfg['min_win']).sum()} still did, and {len(kept)} did so while making money.")
+        return
     best = ok.loc[ok.groupby("strategy")["train_exp$"].idxmax()].sort_values("train_exp$", ascending=False)
     pd.set_option("display.width", 220)
     print("\n## Best setting per rule, chosen on the training days only")

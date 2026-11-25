@@ -1,0 +1,29 @@
+# 10497 symbol-days 2012-12-28 -> 2026-11-25; out-of-sample predictions from 2016-01-04
+
+## How often the direction call was right
+              period    source  min edge  days  direction right %  days that closed up %
+validation 2016-2021   p_model      0.00  4533               51.6                   53.3
+validation 2016-2021   p_model      0.04  2428               52.6                   53.7
+validation 2016-2021   p_model      0.08   875               53.8                   53.1
+validation 2016-2021 p_pattern      0.00  4533               51.2                   53.3
+validation 2016-2021 p_pattern      0.04  2522               51.8                   53.8
+validation 2016-2021 p_pattern      0.08   962               53.0                   54.5
+validation 2016-2021      p_up      0.00  4533               51.8                   53.3
+validation 2016-2021      p_up      0.04  2197               52.8                   53.4
+validation 2016-2021      p_up      0.08   705               55.0                   54.6
+   held back 2022 on   p_model      0.00  3690               51.7                   51.8
+   held back 2022 on   p_model      0.04  1587               50.3                   51.4
+   held back 2022 on   p_model      0.08   309               49.5                   49.8
+   held back 2022 on p_pattern      0.00  3690               51.1                   51.8
+   held back 2022 on p_pattern      0.04  2101               51.7                   51.5
+   held back 2022 on p_pattern      0.08   726               49.9                   51.7
+   held back 2022 on      p_up      0.00  3690               52.0                   51.8
+   held back 2022 on      p_up      0.04  1592               50.5                   50.3
+   held back 2022 on      p_up      0.08   346               49.1                   48.8
+
+## Settings that won at least 60% of trades on the validation years, best first
+Empty DataFrame
+Columns: [dte, min_edge, target, stop, val_n, val_win%, val_exp$, val_t, held_n, held_win%, held_exp$, held_t]
+Index: []
+
+0 of 96 settings were profitable on the validation years; 0 on the held-back years.

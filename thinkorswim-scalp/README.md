@@ -1,23 +1,25 @@
 # ScalpCallPut: thinkorswim option day-trade signals, and what the backtests say
 
-**Result up front: one setup made money in testing, on a small sample; everything else lost.**
+**Result up front: one setup made money in testing, on a small sample. Pushing its win rate to 60% removed the profit.**
 
-- **Longer holds, $1,600 account:** an hourly breakout rule held up to 4 hours turned $1,600 into $2,664.30 over two years of simulated trades (49 trades, 45% winners). Its three best trades made more than the whole profit, so this is a lead to keep testing, not a proven edge.
+- **Hourly breakout, no target ($1,600 account):** turned $1,600 into $2,664.30 over two years of simulated trades (49 trades, 45% winners). Its three best trades made more than the whole profit, so this is a lead to keep testing, not a proven edge.
+- **Same rule tuned for a win rate over 60%:** selling at a quick target won 62-63% of all signals, and 59% of the trades the account could actually take. That account ended at $1,525.80, a loss of $74.20.
+- **Quant model (math and pattern matching on 14 years of daily data):** called the day's direction right 52% of the time on unseen years. Buying calls and puts on it lost at every setting.
 - **1-minute scalp, $50 account:** eight rules, 96 settings, none profitable. The account lost $312.30 over 91 trades.
 - **Changing rules whenever one loses** made things worse both times.
-- No setup came anywhere near a 90% win rate.
 
-All trades are simulated with modelled option prices. Nothing here is a reason to trade real money yet.
+Only calls and puts are ever bought; nothing is sold short. All trades are simulated with modelled option prices. Nothing here is a reason to trade real money yet.
 
 ## What is in this folder
 
 | File | What it is |
 | --- | --- |
 | `ScalpCallPut_STRATEGY.ts` | The thinkScript strategy: eight selectable rules, CALL / PUT / SELL bubbles, status labels |
-| `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds |
+| `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds (three versions) |
 | `ScalpAccount.xlsx` | The made-up $50 account with the 1-minute scalp |
 | `backtest/backtest.py` | Python backtest that re-prices every signal as an option |
 | `backtest/research.py` | Scores every rule on training days and on held-back days |
+| `backtest/quant.py` | The quant model: regression plus pattern matching on daily bars, refitted every year |
 | `backtest/account_longer.py`, `backtest/account.py` | Simulate the two accounts and write the spreadsheets |
 | `backtest/fetch_data.py` | Downloads the bars from Yahoo Finance |
 | `backtest/data/`, `backtest/results/` | The bars used, and the reports and trade lists |
@@ -63,21 +65,68 @@ Reasons not to trust it yet:
 - The profit came from puts. Calls lost money in both periods.
 - The same rule on 43 days of 5-minute bars (30-minute to 4-hour holds) made $15.11 a trade in training and lost $1.88 a trade on held-back days.
 
+### Hunting for a win rate over 60%
+
+Same hourly data, with closer profit targets (0.5, 1 or 1.5 ATR), a wide or no stop, and 2 or 4 hour holds: 168 settings.
+
+- 18 settings won at least 60% of trades in training.
+- The best of them in training (Burst, 72.9% winners) fell to 45.8% on the held-back days and lost money.
+- 6 kept a win rate of 60% or more on the held-back days and made money. All 6 are the Breakout rule with a 0.5 ATR target.
+
+The cleanest of those: Breakout, sell at +0.5 ATR or after 2 hourly bars, 3 ATR stop, contract 5 trading days from expiry.
+
+| | Training | Held back |
+| --- | ---: | ---: |
+| Signals | 48 | 35 |
+| Win rate | 62.5% | 62.9% |
+| Average per trade | $11.12 | $8.86 |
+
+Those averages are too small to tell from zero on this many trades, and the account below shows how fragile they are.
+
 ### The made-up $1,600 account (`LongerHoldAccount.xlsx`)
 
 Each trade spends about 5% of the balance, never less than one contract, and one contract may cost at most 25% of the balance.
-One position at a time; cash from a sale is not reused until the next day.
+One position at a time; cash from a sale is not reused until the next day. Those rules mean the account takes about two thirds of the signals.
 
-| | Breakout only | Switching rules |
+| | Breakout, quick target | Breakout, no target | Switching rules |
+| --- | ---: | ---: | ---: |
+| Trades | 54 | 49 | 51 |
+| Winning trades | 32 (59.3%) | 22 (44.9%) | 10 (19.6%) |
+| Average win / average loss | $45.20 / -$69.12 | $135.79 / -$71.23 | $109.00 / -$51.33 |
+| Net result | -$74.20 | +$1,064.30 | -$1,014.60 |
+| Ending balance | $1,525.80 | $2,664.30 | $585.40 |
+| Largest drop from a high | 19.4% | 30.9% | 69.2% |
+
+- **Quick target** is the over-60% setup. Taking only the trades the account could afford, it won 59.3% and lost $74.20. On the held-back days alone: 21 trades, 12 winners, -$238.30. The win rate is high because winners are cut at about $45 while losers run to about $69.
+- **No target** lets winners run. On the held-back days alone: 20 trades, 8 winners, +$355.00. The three best trades made $1,284, more than the total profit.
+- **Switching rules** moves every week to whichever rule did best over the previous 60 trading days, and stays in cash if none made money. It chased rules that had just been lucky.
+- In both breakout accounts the profit came from puts; calls lost money.
+
+The held-back days have now been looked at several times while choosing settings, so they are no longer a clean test of anything here.
+
+## The quant model (`backtest/quant.py`)
+
+Built the way quant funds describe their approach: no chart reading, only statistics on historical data.
+
+- **Inputs:** 18 measurements known at each morning's open for SPY, QQQ and IWM. They cover the overnight gap, returns over 1, 5 and 20 days, distance from the 20-day average, RSI(2), where yesterday closed in its range, VIX level, change and term structure, each ETF's strength against the other two, bonds, and calendar effects.
+- **Model:** a logistic regression weighs the inputs, and a pattern matcher finds the 100 most similar past mornings and counts how they ended. The two estimates are averaged.
+- **No peeking:** the model is refitted each January on everything before that year, so every prediction from 2016 on is for a day it had never seen.
+- **Trade:** buy a call or put at the open when the estimate is far enough from 50%, sell at a target, a stop, or the close. Settings were chosen on 2016-2021 and checked on 2022-2026.
+
+Data: 3,499 trading days per ETF, 2012-12-28 to 2026-11-25.
+
+| | 2016-2021 | 2022-2026 |
 | --- | ---: | ---: |
-| Trades | 49 | 51 |
-| Winning trades | 22 (44.9%) | 10 (19.6%) |
-| Average win / average loss | $135.79 / -$71.23 | $109.00 / -$51.33 |
-| Net result | +$1,064.30 | -$1,014.60 |
-| Ending balance | $2,664.30 | $585.40 |
+| Direction right, all days | 51.8% | 52.0% |
+| Days that closed above the open anyway | 53.3% | 51.8% |
+| Direction right, most confident calls | 55.0% of 705 | 49.1% of 346 |
+| Option settings that made money (of 96) | 0 | 0 |
+| Highest win rate of any setting | 58.3% | 59.6% |
+| Best average per trade | -$11.71 | -$18.68 |
 
-- **Breakout only** trades the one rule above for the whole two years. On the held-back days alone: 20 trades, 8 winners, +$355.00. The largest drop from a high was 30.9%. The three best trades made $1,285, more than the total profit.
-- **Switching rules** does what you asked: every week it moves to whichever rule did best over the previous 60 trading days, and stays in cash if none made money. It chased rules that had just been lucky and lost 63%.
+The model's direction calls were no better than always guessing "up". A contract held from open to close loses roughly $20 to $30 of time value, and a 52% guess does not cover that.
+
+For scale: the fund this idea comes from was reported to be right about 51% of the time. It made money from millions of tiny, low-cost trades, which a retail options account cannot copy.
 
 ## The 1-minute scalp with a $50 account
 
@@ -180,14 +229,14 @@ Across every target and stop tested (`backtest/results/grid_5m.txt`) no setting 
 
 ## What this backtest does not cover
 
-- **Ten years.** Free 1-minute history goes back 30 days, 5-minute history 60 days and hourly history about 2 years. A scalp cannot be tested on daily bars, so there is no 10-year run. Nobody can backtest the next ten years; a backtest only uses the past.
-- **Real option quotes.** Option prices are modelled with Black-Scholes and volatility from the VIX (VXN for QQQ, 1.2 x VIX for IWM), scaled by 0.8 for same-day contracts. Real fills will differ.
+- **Ten years of intraday trades.** Free 1-minute history goes back 30 days, 5-minute history 60 days and hourly history about 2 years. Only the quant model, which trades once a day on daily bars, covers more than ten years. Nobody can backtest the next ten years; a backtest only uses the past.
+- **Real option quotes.** Option prices are modelled with Black-Scholes and volatility from the VIX (VXN for QQQ, 1.2 x VIX for IWM), scaled by 0.8 for same-day contracts. Real fills will differ. For contracts that expire on a later day the model charges a full day of time decay during market hours, which is harsher than real markets, so those results lean pessimistic.
 - **thinkorswim itself.** The script was written without access to thinkorswim, so it has not been compiled or run there. The Python simulation follows the same rules.
 
 ## Running it in thinkorswim
 
 1. Charts > Studies > Edit Studies > Strategies tab > Create. Paste `ScalpCallPut_STRATEGY.ts`, name it, OK.
-2. For the longer-hold setup use a 1-hour chart of SPY, QQQ or IWM; the script's defaults match it. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
+2. For the longer-hold setup use a 1-hour chart of SPY, QQQ or IWM; the script's defaults match the no-target version, and setting `quickTarget` to yes switches to the over-60% version. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
 3. Right-click an order arrow > Show Report for the underlying P&L.
 4. To test with real historical option prices, use **OnDemand** (top right of the main window). It replays past sessions with the option chain as it traded, on a simulated account. Follow the bubbles and place the trades by hand.
 5. For live paper trading, log in to paperMoney and set the balance to $1,600 from the account adjustment option on the Monitor tab.
@@ -200,6 +249,14 @@ python3 backtest/fetch_data.py
 
 ```bash
 python3 backtest/research.py hourly
+```
+
+```bash
+python3 backtest/research.py hourly60
+```
+
+```bash
+python3 backtest/quant.py
 ```
 
 ```bash

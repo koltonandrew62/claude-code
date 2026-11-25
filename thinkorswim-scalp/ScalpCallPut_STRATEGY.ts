@@ -23,7 +23,10 @@
 # Defaults: the longer-hold setup for a $1,600 account. 1-HOUR chart, Breakout
 #   rule, stop 1.5 ATR, no target, sell after 4 bars, contract about 5 trading
 #   days from expiry costing $4.00 or less. This is the only setup that made
-#   money in the option backtest, on a small sample. See README.md.
+#   money in the option backtest, on a small sample. It won about 45% of trades.
+# Higher win rate: set quickTarget to yes. It sells at +0.5 ATR or after 2
+#   bars and won about 60% of trades, but made little or nothing overall.
+#   See README.md.
 # 1-minute scalp: 1-minute chart, startTime 0935, endTime 1550, flatTime 1555,
 #   targetATR 2.0, stopATR 1.0, maxBars 5. It lost money in the backtest.
 #
@@ -38,6 +41,7 @@ input flatTime = 1430;       # close anything still open on this bar
 input targetATR = 99.0;      # profit target in ATRs of the underlying; 50 or more = no target
 input stopATR = 1.5;         # stop, in ATRs of the underlying
 input maxBars = 4;           # time limit, in bars
+input quickTarget = no;      # yes = sell at +0.5 ATR or after 2 bars, with a 3 ATR stop (ignores the three inputs above)
 input tradeCalls = yes;
 input tradePuts = yes;
 input fastLength = 9;
@@ -47,6 +51,10 @@ input tradeSize = 100;       # shares shown in the strategy report
 input showBubbles = yes;
 input showLevels = yes;
 input useAlerts = yes;
+
+def targetMult = if quickTarget then 0.5 else targetATR;
+def stopMult = if quickTarget then 3.0 else stopATR;
+def barLimit = if quickTarget then 2 else maxBars;
 
 # ---------------------------------------------------------------- indicators
 def rth = SecondsFromTime(0930) >= 0 and SecondsTillTime(1600) > 0;
@@ -135,19 +143,19 @@ tradeEntry = if enterCall or enterPut then open else if position[1] != 0 then tr
 entryATR = if enterCall or enterPut then atrValue[1] else if position[1] != 0 then entryATR[1] else 0;
 barsHeld = if enterCall or enterPut then 1 else if position[1] != 0 then barsHeld[1] + 1 else 0;
 
-def hasTarget = targetATR < 50;
-def callTarget = tradeEntry + targetATR * entryATR;
-def callStop = tradeEntry - stopATR * entryATR;
-def putTarget = tradeEntry - targetATR * entryATR;
-def putStop = tradeEntry + stopATR * entryATR;
+def hasTarget = targetMult < 50;
+def callTarget = tradeEntry + targetMult * entryATR;
+def callStop = tradeEntry - stopMult * entryATR;
+def putTarget = tradeEntry - targetMult * entryATR;
+def putStop = tradeEntry + stopMult * entryATR;
 
 # If a bar touches both levels the stop is assumed to have filled first.
 def callStopHit = holdCall and low <= callStop;
 def callTargetHit = holdCall and hasTarget and !callStopHit and high >= callTarget;
-def callTimeExit = holdCall and !callStopHit and !callTargetHit and (barsHeld >= maxBars or flatBar);
+def callTimeExit = holdCall and !callStopHit and !callTargetHit and (barsHeld >= barLimit or flatBar);
 def putStopHit = holdPut and high >= putStop;
 def putTargetHit = holdPut and hasTarget and !putStopHit and low <= putTarget;
-def putTimeExit = holdPut and !putStopHit and !putTargetHit and (barsHeld >= maxBars or flatBar);
+def putTimeExit = holdPut and !putStopHit and !putTargetHit and (barsHeld >= barLimit or flatBar);
 
 def callExit = callStopHit or callTargetHit or callTimeExit;
 def putExit = putStopHit or putTargetHit or putTimeExit;
@@ -198,10 +206,10 @@ AddLabel(yes,
     else if putSignal then "BUY PUT  (enter next bar)"
     else if position == 1 then "IN CALL - HOLD   sell if price falls to " + Round(callStop, 2)
         + (if hasTarget then " or rises to " + Round(callTarget, 2) else "")
-        + "   bars left: " + (maxBars - barsHeld)
+        + "   bars left: " + (barLimit - barsHeld)
     else if position == -1 then "IN PUT - HOLD   sell if price rises to " + Round(putStop, 2)
         + (if hasTarget then " or falls to " + Round(putTarget, 2) else "")
-        + "   bars left: " + (maxBars - barsHeld)
+        + "   bars left: " + (barLimit - barsHeld)
     else if callExit or putExit then "NO POSITION after this sale"
     else if !inWindow then "NO TRADE  (outside trading window)"
     else "NO TRADE  (waiting for setup)",

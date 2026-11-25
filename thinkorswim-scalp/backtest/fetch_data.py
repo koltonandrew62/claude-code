@@ -1,7 +1,8 @@
-"""Download intraday bars from Yahoo Finance's public chart endpoint into data/*.csv.
+"""Download bars from Yahoo Finance's public chart endpoint into data/*.csv.
 
-Yahoo only serves 5-minute bars for the last 60 days and hourly bars for the
-last ~730 days, so the CSVs committed next to this script are a snapshot.
+Yahoo only serves 1-minute bars for the last 30 days, 5-minute bars for the last
+60 days and hourly bars for the last ~730 days, so the CSVs committed next to
+this script are a snapshot.
 """
 import csv
 import json
@@ -14,7 +15,8 @@ from pathlib import Path
 
 DATA = Path(__file__).parent / "data"
 SYMBOLS = ["SPY", "QQQ", "IWM", "^VIX", "^VXN"]
-SPECS = {"1m": 29, "5m": 59, "1h": 729}  # interval -> lookback days
+SPECS = {"1m": 29, "5m": 59, "1h": 729, "1d": 5450}  # interval -> lookback days
+DAILY_ONLY = ["^VIX3M", "TLT"]  # extra inputs for quant.py, daily bars only
 CHUNK_DAYS = {"1m": 7}  # Yahoo serves 1-minute bars at most 8 days per request
 
 
@@ -53,16 +55,17 @@ def fetch_range(symbol, interval, start, end):
 
 def main():
     DATA.mkdir(exist_ok=True)
-    for sym in SYMBOLS:
-        for interval, days in SPECS.items():
-            rows = fetch(sym, interval, days)
-            out = DATA / f"{sym.replace('^', '')}_{interval}.csv"
-            with open(out, "w", newline="") as f:
-                w = csv.writer(f)
-                w.writerow(["ts_utc", "open", "high", "low", "close", "volume"])
-                w.writerows([[r[0]] + [round(x, 4) for x in r[1:5]] + [r[5]] for r in rows])
-            print(f"{out.name}: {len(rows)} bars {rows[0][0][:10]} -> {rows[-1][0][:10]}", file=sys.stderr)
-            time.sleep(0.5)
+    jobs = [(sym, iv, days) for sym in SYMBOLS for iv, days in SPECS.items()]
+    jobs += [(sym, "1d", SPECS["1d"]) for sym in DAILY_ONLY]
+    for sym, interval, days in jobs:
+        rows = fetch(sym, interval, days)
+        out = DATA / f"{sym.replace('^', '')}_{interval}.csv"
+        with open(out, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["ts_utc", "open", "high", "low", "close", "volume"])
+            w.writerows([[r[0]] + [round(x, 4) for x in r[1:5]] + [r[5]] for r in rows])
+        print(f"{out.name}: {len(rows)} bars {rows[0][0][:10]} -> {rows[-1][0][:10]}", file=sys.stderr)
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 """Run a made-up $1,600 account through two years of hourly bars and write it to a spreadsheet.
 
-Longer holds (1 to 4 hours) with contracts the account can afford. Two accounts:
+Longer holds (1 to 4 hours) with contracts the account can afford. Three accounts:
 
-  Breakout only    trades the single rule that scored best on the training days.
+  Quick target     the breakout rule with a close profit target: wins over 60% of trades.
+  Breakout only    the breakout rule with no target: fewer winners, bigger ones.
   Switching rules  changes rule when the one in use stops working, without looking ahead:
                    every week it scores each candidate on the previous LOOKBACK_DAYS trading
                    days and trades the best one, or stays in cash if none made money.
@@ -33,6 +34,10 @@ LOOKBACK_DAYS = 60
 MIN_LOOKBACK_TRADES = 20
 TRAIN_DAYS = 330                      # same split as research.py hourly
 SINGLE = ("breakout", 4, "5 days out")  # best training result in research.py hourly
+# The setup that won over 60% of trades in both periods of research.py hourly60.
+QUICK = dict(strategy="breakout", target_atr=0.5, stop_atr=3.0, max_bars=2)
+QUICK_COSTS = b.Costs(premium_cap=4.0, dte=5, slippage=0.02)
+QUICK_NAME = "breakout, sell at +0.5 ATR or after 2h, expires 5 days out"
 OUT = Path(__file__).parent.parent / "LongerHoldAccount.xlsx"
 
 
@@ -46,7 +51,9 @@ def candidates():
                 tr = pd.concat([b.simulate(b.add_indicators(df, p), p, costs).assign(symbol=s) for s, df in raw.items()])
                 out[(rule, hold, label)] = tr.sort_values("entry_time").reset_index(drop=True)
     days = sorted({d for df in raw.values() for d in df.date})
-    return out, days
+    p = b.for_hourly(replace(b.Params(), **QUICK))
+    quick = pd.concat([b.simulate(b.add_indicators(df, p), p, QUICK_COSTS).assign(symbol=s) for s, df in raw.items()])
+    return out, days, quick.sort_values("entry_time").reset_index(drop=True)
 
 
 def name(key):
@@ -101,13 +108,13 @@ def walk(cands, days):
     return ledger, weekly
 
 
-def walk_single(cands, days):
-    """Single-rule account: the hourly breakout rule for the whole period."""
+def walk_single(tr, costs, label, days):
+    """Single-rule account: one rule for the whole period."""
     cash, ledger = START_CASH, []
     split = days[TRAIN_DAYS]
     for day in days:
         period = "Training" if day < split else "Held back"
-        cash = take(cands[SINGLE], day, cash, CONTRACTS[SINGLE[2]], name(SINGLE), ledger, period)
+        cash = take(tr, day, cash, costs, label, ledger, period)
     return ledger
 
 
@@ -146,54 +153,57 @@ def results_block(sheet, last):
     ]
 
 
-def build(switching, weekly, single, days, research):
+def build(switching, weekly, single, quick, days, research):
     wb = Workbook()
     summary = wb.active
     summary.title = "Summary"
-    single_ws, switch_ws = wb.create_sheet("Breakout ledger"), wb.create_sheet("Switching ledger")
-    wk, test_ws = wb.create_sheet("Weekly"), wb.create_sheet("Rule tests")
+    quick_ws, single_ws = wb.create_sheet("Quick target ledger"), wb.create_sheet("Breakout ledger")
+    switch_ws, wk, test_ws = wb.create_sheet("Switching ledger"), wb.create_sheet("Weekly"), wb.create_sheet("Rule tests")
+    write_ledger(quick_ws, quick, "Period")
     write_ledger(single_ws, single, "Period")
     write_ledger(switch_ws, switching, "Week of")
-    last_single, last_switch = len(single) + 1, len(switching) + 1
+    last_quick, last_single, last_switch = len(quick) + 1, len(single) + 1, len(switching) + 1
 
-    for col, width in zip("ABCD", (42, 18, 18, 95)):
+    for col, width in zip("ABCDE", (42, 20, 20, 18, 95)):
         summary.column_dimensions[col].width = width
     summary["A1"] = "Made-up $1,600 options account, longer holds"
     summary["A1"].font = Font(name=FONT, bold=True, size=14)
     summary["A2"] = (f"Simulated trades, not real ones. Hourly bars, {days[0]} to {days[-1]}, SPY / QQQ / IWM options. "
                      "Option prices are modelled, not historical quotes.")
-    for col, text in zip("ABD", ("Inputs", "Value", "Notes")):
+    for col, text in zip("ABE", ("Inputs", "Value", "Notes")):
         summary[f"{col}3"], summary[f"{col}3"].font, summary[f"{col}3"].fill = text, BOLD, HEAD_FILL
     inputs = [
-        ("Starting balance ($)", START_CASH, MONEY, "Set by you. Both accounts start here."),
+        ("Starting balance ($)", START_CASH, MONEY, "Set by you. All three accounts start here."),
         ("Commission per contract, per side ($)", 0.65, MONEY, "thinkorswim / Schwab standard option commission. Feeds the Fees column."),
         ("Share of the balance spent per trade", RISK_FRACTION, PCT, "Assumption. Always at least one contract, as long as it costs under 25% of the balance."),
         ("Lookback for the switching account (trading days)", LOOKBACK_DAYS, "0", "Assumption. The switching account takes no trades until this much history exists."),
-        ("Stop (ATR of the hourly chart)", STOP_ATR, "0.0", "Assumption. No profit target: trades run until the stop or the hold time."),
+        ("Stop (ATR of the hourly chart)", STOP_ATR, "0.0", "Assumption, for the no-target and switching accounts. The quick-target account uses a 3 ATR stop."),
     ]
     for r, (label, value, fmt, note) in enumerate(inputs, start=4):
-        summary[f"A{r}"], summary[f"B{r}"], summary[f"D{r}"] = label, value, note
+        summary[f"A{r}"], summary[f"B{r}"], summary[f"E{r}"] = label, value, note
         summary[f"B{r}"].font, summary[f"B{r}"].fill, summary[f"B{r}"].number_format = BLUE, INPUT_FILL, fmt
-    for col, text in zip("ABCD", ("Results", "Breakout only", "Switching rules", "Notes")):
+    for col, text in zip("ABCDE", ("Results", "Breakout, quick target", "Breakout, no target", "Switching rules", "Notes")):
         summary[f"{col}11"], summary[f"{col}11"].font, summary[f"{col}11"].fill = text, BOLD, HEAD_FILL
     labels = ["Trades taken", "Winning trades", "Win rate", "Total net P&L ($)", "Average per trade ($)",
               "Average win ($)", "Average loss ($)", "Ending balance ($)", "Return on starting balance",
               "Lowest balance ($)", "Highest balance ($)"]
-    for col, block in (("B", results_block("Breakout ledger", last_single)), ("C", results_block("Switching ledger", last_switch))):
+    for col, block in (("B", results_block("Quick target ledger", last_quick)), ("C", results_block("Breakout ledger", last_single)),
+                       ("D", results_block("Switching ledger", last_switch))):
         for r, (formula, fmt) in enumerate(block, start=12):
             summary[f"{col}{r}"] = formula.replace("{c}", col)
             summary[f"{col}{r}"].number_format = fmt
     for r, label in enumerate(labels, start=12):
         summary[f"A{r}"] = label
-    summary["D12"] = "One position at a time across the three symbols. Cash from a sale is not reused until the next day."
-    summary["A23"], summary["C23"] = "Weeks traded / weeks in cash", f'=COUNTIF(Weekly!$D$2:$D${len(weekly) + 1},"Trade it")'
-    summary["C24"] = f'=COUNTIF(Weekly!$D$2:$D${len(weekly) + 1},"Stay in cash*")'
+    summary["E12"] = "One position at a time across the three symbols. Cash from a sale is not reused until the next day."
+    summary["A23"], summary["D23"] = "Weeks traded / weeks in cash", f'=COUNTIF(Weekly!$D$2:$D${len(weekly) + 1},"Trade it")'
+    summary["D24"] = f'=COUNTIF(Weekly!$D$2:$D${len(weekly) + 1},"Stay in cash*")'
     summary["A24"] = "(switching account only)"
-    p, m = f"'Breakout ledger'!$P$2:$P${last_single}", f"'Breakout ledger'!$M$2:$M${last_single}"
-    summary["A26"] = "Breakout only, by period"
-    for col, text in zip("ABC", ("Breakout only, by period", "Training", "Held back")):
+    heads = ("By period", "Quick target: training", "Quick target: held back", "No target: training", "No target: held back")
+    for col, text in zip("ABCDE", heads):
         summary[f"{col}26"], summary[f"{col}26"].font, summary[f"{col}26"].fill = text, BOLD, HEAD_FILL
-    for col, period in (("B", "Training"), ("C", "Held back")):
+    for col, sheet, last, period in (("B", "Quick target ledger", last_quick, "Training"), ("C", "Quick target ledger", last_quick, "Held back"),
+                                     ("D", "Breakout ledger", last_single, "Training"), ("E", "Breakout ledger", last_single, "Held back")):
+        p, m = f"'{sheet}'!$P$2:$P${last}", f"'{sheet}'!$M$2:$M${last}"
         summary[f"{col}27"] = f'=COUNTIFS({p},"{period}")'
         summary[f"{col}28"] = f'=COUNTIFS({p},"{period}",{m},">0")'
         summary[f"{col}29"] = f"=IF({col}27=0,0,{col}28/{col}27)"
@@ -203,20 +213,21 @@ def build(switching, weekly, single, days, research):
         summary[f"{col}30"].number_format = summary[f"{col}31"].number_format = MONEY
     for r, label in enumerate(["Trades", "Winning trades", "Win rate", "Net P&L ($)", "Average per trade ($)"], start=27):
         summary[f"A{r}"] = label
-    summary["D26"] = ("The breakout rule and its settings were picked using the Training period, so only the Held back "
-                      "column is a fair test.")
+    summary["A32"] = ("The breakout rule was found using the Training period, and the held-back days have now been looked at "
+                      "several times while choosing settings, so even the Held back columns are no longer a clean test.")
     notes = [
         "How to read this",
-        f"Breakout only: one rule for the whole period ({name(SINGLE)}, stop {STOP_ATR} ATR, no target).",
+        f"Breakout, quick target: {QUICK_NAME}, stop 3 ATR. This is the setup that won over 60% of trades.",
+        f"Breakout, no target: {name(SINGLE)}, stop {STOP_ATR} ATR, no target. Fewer winners, bigger ones.",
         "Switching rules: every week, trade whichever rule did best over the lookback, or stay in cash if none made money.",
         "Blue cells are inputs or simulated trade data. Black cells are formulas.",
         "The trade lists were generated with the inputs above. Changing the commission updates fees and balances, "
         "but not which trades were taken; rerun backtest/account_longer.py for that.",
         "Rule tests: every rule and setting scored on 330 training days and 170 held-back days.",
     ]
-    for r, text in enumerate(notes, start=33):
+    for r, text in enumerate(notes, start=34):
         summary[f"A{r}"] = text
-    summary["A33"].font = BOLD
+    summary["A34"].font = BOLD
 
     header(wk, ["Week of", "Best rule over the lookback", "Its average per trade over the lookback ($)", "Decision",
                 "Trades", "Net P&L ($)"], [12, 42, 20, 50, 9, 13])
@@ -260,12 +271,14 @@ def build(switching, weekly, single, days, research):
 
 
 def main():
-    cands, days = candidates()
+    cands, days, quick_trades = candidates()
     switching, weekly = walk(cands, days)
-    single = walk_single(cands, days)
+    single = walk_single(cands[SINGLE], CONTRACTS[SINGLE[2]], name(SINGLE), days)
+    quick = walk_single(quick_trades, QUICK_COSTS, QUICK_NAME, days)
     research = pd.read_csv(Path(__file__).parent / "results" / "research_1h_longer.csv")
-    build(switching, weekly, single, days, research)
-    print(f"{OUT.name}: breakout-only {len(single)} trades, switching {len(switching)} trades", file=sys.stderr)
+    build(switching, weekly, single, quick, days, research)
+    print(f"{OUT.name}: quick target {len(quick)} trades, no target {len(single)} trades, "
+          f"switching {len(switching)} trades", file=sys.stderr)
 
 
 if __name__ == "__main__":

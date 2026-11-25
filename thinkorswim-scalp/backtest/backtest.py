@@ -204,7 +204,7 @@ def minutes_to_close(ts):
 def pick_strike(spot, minutes_left, iv, is_call, cap):
     """Nearest-the-money $1 strike whose ask fits under `cap`; None if nothing sensible."""
     strike = math.ceil(spot) if is_call else math.floor(spot)
-    for _ in range(40):
+    for _ in range(200):
         mid = bs_price(spot, strike, minutes_left, iv, is_call)
         if mid < 0.05:
             return None
