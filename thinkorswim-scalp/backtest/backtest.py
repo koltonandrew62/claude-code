@@ -48,6 +48,7 @@ class Costs:
     slippage: float = 0.01      # $ per share, paid on entry and again on exit
     commission: float = 0.65    # $ per contract, per side
     premium_cap: float = 0.45   # most a $50 account can pay for one contract
+    dte: int = 0                # trading days until expiry; 0 = expires today
 
 
 # --------------------------------------------------------------------------- data
@@ -68,7 +69,8 @@ def load_underlying(symbol, interval, iv_scale=IV_SCALE):
         vix = load("VIX", interval).close.reindex(df.index, method="ffill") * fallback
         stale = iv.isna() | (iv.index.to_series().diff().dt.days.fillna(0) < 0)
         iv = iv.where(~stale, vix).fillna(vix)
-    df["iv"] = iv / 100.0 * iv_scale
+    df["iv_raw"] = iv / 100.0           # for contracts that live past today
+    df["iv"] = df.iv_raw * iv_scale     # for same-day contracts
     return df.dropna(subset=["iv"])
 
 
@@ -223,7 +225,8 @@ def simulate(df, p, costs, cap="default"):
     cap = costs.premium_cap if cap == "default" else cap
     bar = pd.Timedelta(df.index[1] - df.index[0])
     o, h, l, c = (df[k].to_numpy() for k in ("open", "high", "low", "close"))
-    atr, iv = df.atr.to_numpy(), df.iv.to_numpy()
+    atr, iv = df.atr.to_numpy(), (df.iv_raw if costs.dte else df.iv).to_numpy()
+    extra_min = costs.dte * 390
     sig_call, sig_put, flat = df.sig_call.to_numpy(), df.sig_put.to_numpy(), df.is_flat_bar.to_numpy()
     dates, idx = df.date.to_numpy(), df.index
     trades, i, n = [], 0, len(df)
@@ -255,11 +258,11 @@ def simulate(df, p, costs, cap="default"):
                 continue
             break
 
-        entry_min = minutes_to_close(idx[e])
+        entry_min = minutes_to_close(idx[e]) + extra_min
         strike = pick_strike(entry, entry_min, iv[i], is_call, cap)
         if strike is not None:
             buy = bs_price(entry, strike, entry_min, iv[i], is_call) + costs.slippage
-            sell_mid = bs_price(exit_px, strike, minutes_to_close(exit_ts), iv[j], is_call)
+            sell_mid = bs_price(exit_px, strike, minutes_to_close(exit_ts) + extra_min, iv[j], is_call)
             sell = max(sell_mid - costs.slippage, 0.0)
             gross = (sell_mid - (buy - costs.slippage)) * 100
             net = (sell - buy) * 100 - 2 * costs.commission
@@ -315,6 +318,11 @@ def run_account(tr, start_cash=50.0, commission=0.65):
 def for_one_minute(p):
     """Clock settings for 1-minute bars: trade 9:35-15:50, flat by 15:55."""
     return replace(p, start="09:35", end="15:50", flat="15:55")
+
+
+def for_hourly(p):
+    """Clock settings for hourly bars: signals on the 10:30-13:30 bars, flat by 15:30."""
+    return replace(p, start="10:30", end="13:30", flat="14:30")
 
 
 # ----------------------------------------------------------------------- reports

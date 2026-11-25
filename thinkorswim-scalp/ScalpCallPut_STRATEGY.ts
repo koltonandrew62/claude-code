@@ -1,41 +1,48 @@
-# ScalpCallPut  --  1-minute options scalp with CALL / PUT callouts
+# ScalpCallPut  --  options day-trade signals with CALL / PUT / SELL callouts
 #
 # Install: Charts > Studies > Edit Studies > Strategies tab > Create...
 #          paste this file, name it ScalpCallPut, click OK.
-# Chart:   1-minute bars, regular hours, on a liquid underlying (SPY, QQQ, IWM).
+# Chart:   regular hours, on a liquid underlying (SPY, QQQ, IWM).
 #
 # What it does
 #   Pick one of eight entry rules with the "rule" input. Each rule marks a
-#   CALL or a PUT. A bubble marks every signal bar, and the label in the
-#   top-left corner says what to do right now. Entry is the open of the next
-#   bar. The trade is closed at the target, at the stop, or after maxBars
-#   one-minute bars, whichever comes first.
+#   CALL or a PUT with a bubble on the signal bar; entry is the open of the
+#   next bar. While a trade is open the label shows the stop, the target and
+#   the bars left. When the stop or target is touched, or the time limit is
+#   reached, a yellow SELL bubble and a yellow SELL label appear.
 #
+#   Breakout    close beyond the 30-bar high/low on 1.5x volume, on the VWAP side
 #   Pullback    with the trend, dip to EMA(9) and close back through it
 #   Burst       wide high-volume bar closing near its extreme, on the VWAP side
-#   Breakout    close beyond the 30-bar high/low on 1.5x volume, on the VWAP side
 #   PowerHour   the Breakout rule, 15:00 onward only
 #   ORB         first close outside the 9:30-9:45 range, before 11:30
 #   BandFade    close back inside a 2.5 SD band after closing outside it
 #   RSI2        with the trend, RSI(2) washout then a bar back in the trend's favour
 #   Exhaustion  fade three straight bars that travelled at least 2.5 ATR
 #
-# None of these rules was profitable in the option backtest. See README.md.
+# Defaults: the longer-hold setup for a $1,600 account. 1-HOUR chart, Breakout
+#   rule, stop 1.5 ATR, no target, sell after 4 bars, contract about 5 trading
+#   days from expiry costing $4.00 or less. This is the only setup that made
+#   money in the option backtest, on a small sample. See README.md.
+# 1-minute scalp: 1-minute chart, startTime 0935, endTime 1550, flatTime 1555,
+#   targetATR 2.0, stopATR 1.0, maxBars 5. It lost money in the backtest.
 #
 # thinkorswim strategies simulate trades on the chart symbol, not on options.
 # The orders below therefore show the underlying move; the option to buy is the
-# one named in the bubble (same-day expiry).
+# one named in the bubble.
 
 input rule = {default Breakout, Pullback, Burst, PowerHour, ORB, BandFade, RSI2, Exhaustion};
-input startTime = 0935;      # first bar allowed to signal (US/Eastern)
-input endTime = 1550;        # last bar allowed to signal
-input flatTime = 1555;       # close anything still open on this bar
+input startTime = 1030;      # first bar allowed to signal (US/Eastern)
+input endTime = 1330;        # last bar allowed to signal
+input flatTime = 1430;       # close anything still open on this bar
+input targetATR = 99.0;      # profit target in ATRs of the underlying; 50 or more = no target
+input stopATR = 1.5;         # stop, in ATRs of the underlying
+input maxBars = 4;           # time limit, in bars
+input tradeCalls = yes;
+input tradePuts = yes;
 input fastLength = 9;
 input slowLength = 21;
 input atrLength = 14;
-input targetATR = 2.0;       # profit target, in ATRs of the underlying
-input stopATR = 1.0;         # stop, in ATRs of the underlying
-input maxBars = 5;           # time stop, in bars (3 to 5 for this scalp)
 input tradeSize = 100;       # shares shown in the strategy report
 input showBubbles = yes;
 input showLevels = yes;
@@ -108,8 +115,8 @@ case Exhaustion:
     putRule = greenBar and greenBar[1] and greenBar[2] and -threeBarDrop >= 2.5 * atrValue[3];
 }
 
-def callSetup = inWindow and callRule;
-def putSetup = inWindow and putRule;
+def callSetup = inWindow and tradeCalls and callRule;
+def putSetup = inWindow and tradePuts and putRule;
 
 # ------------------------------------------------------------- position state
 # position:  1 = holding the call side, -1 = holding the put side, 0 = flat,
@@ -128,6 +135,7 @@ tradeEntry = if enterCall or enterPut then open else if position[1] != 0 then tr
 entryATR = if enterCall or enterPut then atrValue[1] else if position[1] != 0 then entryATR[1] else 0;
 barsHeld = if enterCall or enterPut then 1 else if position[1] != 0 then barsHeld[1] + 1 else 0;
 
+def hasTarget = targetATR < 50;
 def callTarget = tradeEntry + targetATR * entryATR;
 def callStop = tradeEntry - stopATR * entryATR;
 def putTarget = tradeEntry - targetATR * entryATR;
@@ -135,10 +143,10 @@ def putStop = tradeEntry + stopATR * entryATR;
 
 # If a bar touches both levels the stop is assumed to have filled first.
 def callStopHit = holdCall and low <= callStop;
-def callTargetHit = holdCall and !callStopHit and high >= callTarget;
+def callTargetHit = holdCall and hasTarget and !callStopHit and high >= callTarget;
 def callTimeExit = holdCall and !callStopHit and !callTargetHit and (barsHeld >= maxBars or flatBar);
 def putStopHit = holdPut and high >= putStop;
-def putTargetHit = holdPut and !putStopHit and low <= putTarget;
+def putTargetHit = holdPut and hasTarget and !putStopHit and low <= putTarget;
 def putTimeExit = holdPut and !putStopHit and !putTargetHit and (barsHeld >= maxBars or flatBar);
 
 def callExit = callStopHit or callTargetHit or callTimeExit;
@@ -166,12 +174,35 @@ AddOrder(OrderType.BUY_TO_CLOSE, putTimeExit, close, tradeSize, Color.GRAY, Colo
 # ------------------------------------------------------------------ callouts
 AddChartBubble(showBubbles and callSignal, low, "CALL", Color.GREEN, no);
 AddChartBubble(showBubbles and putSignal, high, "PUT", Color.RED, yes);
+AddChartBubble(showBubbles and callExit, high,
+    if callStopHit then "SELL CALL (stop)" else if callTargetHit then "SELL CALL (target)" else "SELL CALL (time)",
+    Color.YELLOW, yes);
+AddChartBubble(showBubbles and putExit, low,
+    if putStopHit then "SELL PUT (stop)" else if putTargetHit then "SELL PUT (target)" else "SELL PUT (time)",
+    Color.YELLOW, no);
+
+# Shown only on a bar where the open trade should be sold. The stop and target
+# versions appear as soon as price touches the level; the time version is on
+# screen for the whole final bar.
+AddLabel(callExit or putExit,
+    if callStopHit then "SELL CALL NOW  (stop hit)"
+    else if callTargetHit then "SELL CALL NOW  (target hit)"
+    else if callTimeExit then "SELL CALL at the close of this bar  (time limit)"
+    else if putStopHit then "SELL PUT NOW  (stop hit)"
+    else if putTargetHit then "SELL PUT NOW  (target hit)"
+    else "SELL PUT at the close of this bar  (time limit)",
+    Color.YELLOW);
 
 AddLabel(yes,
     if callSignal then "BUY CALL  (enter next bar)"
     else if putSignal then "BUY PUT  (enter next bar)"
-    else if position == 1 then "IN CALL  target " + Round(callTarget, 2) + "  stop " + Round(callStop, 2)
-    else if position == -1 then "IN PUT  target " + Round(putTarget, 2) + "  stop " + Round(putStop, 2)
+    else if position == 1 then "IN CALL - HOLD   sell if price falls to " + Round(callStop, 2)
+        + (if hasTarget then " or rises to " + Round(callTarget, 2) else "")
+        + "   bars left: " + (maxBars - barsHeld)
+    else if position == -1 then "IN PUT - HOLD   sell if price rises to " + Round(putStop, 2)
+        + (if hasTarget then " or falls to " + Round(putTarget, 2) else "")
+        + "   bars left: " + (maxBars - barsHeld)
+    else if callExit or putExit then "NO POSITION after this sale"
     else if !inWindow then "NO TRADE  (outside trading window)"
     else "NO TRADE  (waiting for setup)",
     if callSignal or position == 1 then Color.GREEN
@@ -193,7 +224,7 @@ FastEMA.SetDefaultColor(Color.CYAN);
 plot SlowEMA = emaSlow;
 SlowEMA.SetDefaultColor(Color.MAGENTA);
 
-plot TargetLevel = if showLevels and position == 1 then callTarget else if showLevels and position == -1 then putTarget else Double.NaN;
+plot TargetLevel = if showLevels and hasTarget and position == 1 then callTarget else if showLevels and hasTarget and position == -1 then putTarget else Double.NaN;
 TargetLevel.SetDefaultColor(Color.GREEN);
 TargetLevel.SetPaintingStrategy(PaintingStrategy.HORIZONTAL);
 
@@ -203,3 +234,5 @@ StopLevel.SetPaintingStrategy(PaintingStrategy.HORIZONTAL);
 
 Alert(useAlerts and callSignal, "ScalpCallPut: BUY CALL", Alert.BAR, Sound.Ding);
 Alert(useAlerts and putSignal, "ScalpCallPut: BUY PUT", Alert.BAR, Sound.Ding);
+Alert(useAlerts and callExit, "ScalpCallPut: SELL CALL", Alert.BAR, Sound.Bell);
+Alert(useAlerts and putExit, "ScalpCallPut: SELL PUT", Alert.BAR, Sound.Bell);
