@@ -105,38 +105,97 @@ h4{margin:0;font-size:10px;letter-spacing:.14em;color:var(--dim)}
 .strips>*{flex:1}
 .xa{width:100%;margin-top:4px}
 @media(max-width:480px){.ch,.mst{min-width:0;padding:8px 3px}}
+#booth{display:flex;gap:8px;width:max-content;max-width:none;margin:8px auto;padding:0;align-items:stretch}
+#booth.stack{width:auto;flex-wrap:wrap;justify-content:center;padding:0 8px}
+.deck{width:350px;flex:none;background:linear-gradient(#18191c,#0c0c0e);border-radius:8px}
+.stack .deck{width:min(350px,100%)}
+.screen{border:6px solid #050506;box-shadow:0 0 0 1px #2a2c31,inset 0 0 24px #0a1a3066;padding:6px}
+.zoom{height:78px;margin:4px 0}
+.over{height:24px}
+.info{font-size:13px;margin-top:4px}
+.info .bpm{font-size:17px}
+.touch{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+.touch .tabs{display:flex;gap:3px}
+.touch .b,.tpad{flex:1;background:#0c1626;border:1px solid #1e3358;border-radius:3px;box-shadow:none;color:#8fb6ee;font-size:8.5px;font-weight:700;letter-spacing:.02em;padding:6px 1px;white-space:nowrap}
+.touch .b.on{background:var(--blue);color:#001;box-shadow:none}
+.tps{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
+.tpad{height:30px;font-size:11px;background:#0f1f38;color:#cfe2ff}
+.tpad:active{background:var(--blue);color:#000}
+.hot{grid-template-columns:repeat(3,.8fr) repeat(8,1fr);gap:3px}
+.hot .b{padding:6px 0;font-size:9px}
+.pad{height:26px}
+.body{grid-template-columns:78px minmax(0,1fr) 54px;gap:8px}
+.left{gap:4px}
+.left .loops{margin:0}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:4px;width:100%;--c:var(--amb)}
+.left .b,.right .b{padding:6px 1px;font-size:9px}
+.left .round{width:60px;height:60px;margin-top:4px}
+.right{gap:5px}
+.fader.tempo{height:170px}
+.jog{background:repeating-conic-gradient(#34363b 0 1.2deg,#101113 1.2deg 2.4deg);box-shadow:0 8px 20px #000c,0 0 0 2px #000,0 0 0 3px #e9eefc55,0 0 18px #cfe0ff33}
+.disp{inset:24%;box-shadow:0 0 0 3px #0c0d0f,0 0 0 5px #f2f6ffcc,0 0 18px #dfe9ff88}
+.disp b{font-size:22px}
+.disp em{font-size:11px;color:#fff;letter-spacing:.04em}
+.mixer{width:440px;flex:none;background:linear-gradient(#1a1b1e,#0d0d0f);gap:8px;padding:8px}
+.stack .mixer{width:min(440px,100%)}
+.mtop{display:flex;gap:5px;flex:1}
+.side{width:78px;display:flex;flex-direction:column;align-items:center;gap:7px;padding:8px 5px;background:#0b0b0d;border:1px solid #000;border-radius:5px}
+.side .b{width:100%;font-size:9px;padding:8px 1px}
+.cfx{--c:#e9eefc}
+.side .vu{height:auto;flex:1;min-height:90px}
+.ch{flex:1;min-width:0;padding:6px 3px 5px;gap:6px;justify-content:space-between}
+.ch h4{font-size:13px;color:#fff}
+.eq{display:flex;gap:4px;align-items:stretch}
+.eq>div:first-child{display:flex;flex-direction:column;gap:7px}
+.eq .vu{height:auto;width:7px}
+.knob{width:32px;height:32px;background:radial-gradient(circle at 35% 30%,#3a3c42,#0e0f11 70%)}
+.knob.big{width:38px;height:38px;background:radial-gradient(circle at 35% 30%,#d5d8df,#70737b 70%)}
+.knob.big::after{background:#111}
+.ch .fader{height:170px}
+.fxd{width:100%;background:#04060a;border:1px solid #1e3358;border-radius:3px;text-align:center;padding:5px 0;color:#8fb6ee;font-size:8px;letter-spacing:.1em}
+.fxd b{display:block;font-size:15px;color:#fff;letter-spacing:0}
+.beats{width:100%}
+.fxon{--c:var(--blue);width:56px;height:56px;font-size:8.5px}
+.fxon.on{border-color:var(--c);color:#fff;box-shadow:0 0 14px var(--c)}
+.xa{font-size:8.5px;padding:5px 0}
+.stack .mtop{flex-wrap:wrap}
+.stack .side{flex:1 1 40%;order:1}
 </style>
 </head>
 <body>
-<header><h1>DJ BOOTH</h1><span>Two club decks, a pro performance deck and a 3-channel mixer. Load your own audio files and mix.</span></header>
+<header><h1>DJ BOOTH</h1><span>Four club decks around a 4-channel mixer. Load your own audio files and mix.</span></header>
 <main id="booth">
   <section class="deck" data-i="0" aria-label="Deck 1"></section>
+  <section class="deck" data-i="1" aria-label="Deck 2"></section>
   <section class="mixer" aria-label="Mixer">
-    <div class="strips">
-      <div class="ch" data-ch="0"></div>
-      <div class="ch" data-ch="1"></div>
-      <div class="ch" data-ch="2"></div>
-      <div class="mst">
+    <div class="mtop">
+      <div class="side">
+        <h4>COLOR FX</h4>
+        <button class="b cfx on" data-c="0">FILTER</button><button class="b cfx" data-c="1">DUB ECHO</button><button class="b cfx" data-c="2">SPACE</button>
         <h4>MASTER</h4>
         <div class="k"><div class="knob" id="mlev"></div>LEVEL</div>
         <div class="vu" id="mvu"><i></i></div>
-        <h4>ECHO</h4>
+      </div>
+      <div class="ch" data-ch="0"></div><div class="ch" data-ch="1"></div><div class="ch" data-ch="2"></div><div class="ch" data-ch="3"></div>
+      <div class="side">
+        <h4>BEAT FX</h4>
+        <div class="fxd"><b id="fxb">126.0</b>ECHO</div>
         <div class="beats"><button class="b" data-b=".25">1/4</button><button class="b on" data-b=".5">1/2</button><button class="b" data-b=".75">3/4</button><button class="b" data-b="1">1</button></div>
         <div class="k"><div class="knob" id="edep"></div>DEPTH</div>
-        <button class="b" id="eon" style="--c:var(--blue);width:100%">ON/OFF</button>
+        <button class="round fxon" id="eon">ON/OFF</button>
       </div>
     </div>
     <div class="xfw">A<div class="fader h" id="xf"><i></i></div>B</div>
   </section>
-  <section class="deck" data-i="1" aria-label="Deck 2"></section>
-  <section class="deck pro" data-i="2" aria-label="Deck 3"></section>
+  <section class="deck" data-i="2" aria-label="Deck 3"></section>
+  <section class="deck" data-i="3" aria-label="Deck 4"></section>
 </main>
 <section id="lib" aria-label="Tracks">
   <div class="row"><h4>TRACKS</h4><button class="b" id="add">+ ADD SONGS</button><button class="b" id="demo">LOAD DEMO BEATS</button><input type="file" id="pick" multiple hidden accept="audio/*,.mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.aif,.aiff"></div>
   <p id="empty">Add MP3, WAV, FLAC, M4A or OGG files from your device, or drop them anywhere on the page. Drop a file on a deck to load it straight there.</p>
   <ul id="list"></ul>
 </section>
-<footer>Keys: A / S = deck 1 cue / play · K / L = deck 2 cue / play · Z / X = deck 3 cue / play. Drag a knob up or down, double-click any control to reset it. Drag the jog wheel to nudge a playing track or scrub a paused one.</footer>
+<footer>Keys: A/S, D/F, J/K and L/; are cue / play on decks 1 to 4. Drag a knob up or down, double-click any control to reset it. Drag the jog wheel to nudge a playing track or scrub a paused one; with VINYL on, it scratches.</footer>
 <script>
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
@@ -169,10 +228,10 @@ function ctl(el,{type='knob',min=-1,max=1,val=0,step=(max-min)/40,label,on}){
   el.tabIndex=0;el.setAttribute('role','slider');el.setAttribute('aria-valuemin',min);el.setAttribute('aria-valuemax',max);
   if(label)el.setAttribute('aria-label',label);
   el.addEventListener('pointerdown',e=>{e.preventDefault();el.focus();el.setPointerCapture(e.pointerId);
-    const y0=e.clientY,v0=v,r=el.getBoundingClientRect();
+    const y0=e.clientY,v0=v,r=el.getBoundingClientRect(),C=CAP*r.width/(el.offsetWidth||r.width);
     const mv=e=>{if(type==='knob')return set(v0+(y0-e.clientY)/160*(max-min)*(e.shiftKey?.25:1));
-      let t;if(type==='h')t=(e.clientX-r.left-CAP/2)/(r.width-CAP);
-      else{t=(e.clientY-r.top-CAP/2)/(r.height-CAP);if(type==='v')t=1-t}
+      let t;if(type==='h')t=(e.clientX-r.left-C/2)/(r.width-C);
+      else{t=(e.clientY-r.top-C/2)/(r.height-C);if(type==='v')t=1-t}
       set(min+t*(max-min))};
     if(type!=='knob')mv(e);el.onpointermove=mv;el.onpointerup=el.onpointercancel=()=>{el.onpointermove=null}});
   el.addEventListener('dblclick',()=>set(val));
@@ -218,54 +277,41 @@ function demo(bpm,root){
 }
 
 /* ---------- deck ---------- */
-const LS=[1/16,1/8,1/4,1/2,1,2,4,8,16,32,64,1/3,2/3,3/4,1.5,3],LL=['1/16','1/8','1/4','1/2','1','2','4','8','16','32','64','1/3','2/3','3/4','1.5','3'];
-const JV=[-1,1,-2,2,-4,4,-8,8,-16,16,-32,32,-64,64,-.5,.5];
+const LS=[1/8,1/4,1/2,1,2,4,8,16],LL=['1/8','1/4','1/2','1','2','4','8','16'],JV=[-16,-8,-4,-1,1,4,8,16];
 const B=(a,l)=>`<button class="b" data-a="${a}">${l}</button>`;
-const proBody=i=>`<div class="body">
-  <div class="panel">
-    <h4>MODE</h4>${B('slip','SLIP')}${B('quant','QUANT')}${B('rev','REV')}${B('vinyl','VINYL')}${B('brake','BRAKE')}${B('home','|&#9664;')}
-    <h4>LOOP</h4><button class="b lin">IN</button><button class="b lout">OUT</button><button class="b w re">RELOOP / EXIT</button>${B('half','&frac12;')}${B('dbl','&times;2')}
-    ${B('l1','1')}${B('l2','2')}<button class="b l4">4</button><button class="b l8">8</button>${B('l16','16')}${B('l32','32')}
-    <h4>BEAT JUMP</h4>${B('j-16','&#9664; 16')}${B('j-4','&#9664; 4')}${B('j-1','&#9664; 1')}${B('j1','1 &#9654;')}${B('j4','4 &#9654;')}${B('j16','16 &#9654;')}
-    <h4>BPM / GRID / ZOOM</h4>${B('tap','TAP')}${B('bh','BPM &divide;2')}${B('bd','BPM &times;2')}${B('gl','&#9664; GRID')}${B('gr','GRID &#9654;')}${B('zi','ZOOM +')}
-    <h4>CUE CALL / PITCH BEND</h4>${B('cp','&#9664; CUE')}${B('cn','CUE &#9654;')}<button class="b" data-bend=".94">BEND &minus;</button><button class="b" data-bend="1.06">BEND +</button>${B('stop','STOP')}${B('zo','ZOOM &minus;')}
-    <div class="tp2"><button class="round cue">CUE</button><button class="round play" aria-label="Play / pause">&#9654;&#10074;&#10074;</button></div>
-  </div>
-  <div class="jog" aria-label="Jog wheel"><div class="plat"></div><div class="disp"><i class="mark"></i><div><b>${i+1}</b><em>PRO</em></div></div></div>
-  <div class="padsw">
-    <div class="tabs">${['HOT CUE','BEAT LOOP','BEAT JUMP','ROLL'].map((t,m)=>B('m'+m,t)).join('')}<button class="b del" style="--c:#ff3b3b">DELETE</button></div>
-    <div class="pads16">${JV.map((_,k)=>`<button class="pad" style="--c:${HC[k%8]}" data-k="${k}"></button>`).join('')}</div>
-  </div>
-  <div class="right">
-    <button class="b sync" style="--c:var(--blue)">BEAT SYNC</button><button class="b rng">&plusmn;10%</button>
-    <div class="fader vi tempo"><i></i></div><button class="b rst">TEMPO RESET</button>
-  </div>
-</div>`;
-const deckHTML=(i,pro)=>`
+const deckHTML=i=>`
 <div class="screen">
   <div class="row"><b class="dk">${i+1}</b><span class="title">No track. Press LOAD or drop a song here</span><button class="b load">LOAD</button><input type="file" hidden accept="audio/*,.mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.aif,.aiff"></div>
   <canvas class="zoom"></canvas><canvas class="over" aria-label="Track overview, click to jump"></canvas>
   <div class="row info"><span class="time">00:00.0</span><span class="rem">-00:00.0</span><span class="tp">0.00%</span><span class="bpm"><span class="bv">---</span><small>BPM</small></span></div>
+  <div class="touch">
+    <div class="tabs">${B('m1','BEAT LOOP')}${B('m2','BEAT JUMP')}${B('m3','ROLL')}${B('half','&frac12;')}${B('dbl','&times;2')}${B('zo','ZOOM&minus;')}${B('zi','ZOOM+')}</div>
+    <div class="tps">${LS.map((_,k)=>`<button class="tpad" data-k="${k}"></button>`).join('')}</div>
+    <div class="tabs">${B('tap','TAP')}${B('bh','BPM&divide;2')}${B('bd','BPM&times;2')}${B('gl','&#9664;GRID')}${B('gr','GRID&#9654;')}${B('quant','QUANTIZE')}</div>
+  </div>
 </div>
-${pro?proBody(i):`<div class="hot"><button class="b del" style="--c:#ff3b3b">DELETE</button>${HC.map((c,k)=>`<button class="pad" style="--c:${c}" data-k="${k}" aria-label="Hot cue ${'ABCDEFGH'[k]}">${'ABCDEFGH'[k]}</button>`).join('')}</div>
+<div class="hot"><button class="b" data-a="cp" aria-label="Previous cue">&#9664;</button><button class="b" data-a="cn" aria-label="Next cue">&#9654;</button><button class="b del" style="--c:#ff3b3b">DEL</button>${HC.map((c,k)=>`<button class="pad" style="--c:${c}" data-k="${k}" aria-label="Hot cue ${'ABCDEFGH'[k]}">${'ABCDEFGH'[k]}</button>`).join('')}</div>
 <div class="body">
   <div class="left">
     <div class="loops"><button class="b lin">IN</button><button class="b lout">OUT</button><button class="b w re">RELOOP / EXIT</button><button class="b l4">4 BEAT</button><button class="b l8">8 BEAT</button></div>
+    <div class="g2"><button class="b" data-a="j-1" aria-label="Beat jump back">&#9664; JUMP</button><button class="b" data-a="j1" aria-label="Beat jump forward">JUMP &#9654;</button></div>
+    <div class="g2">${B('slip','SLIP')}${B('rev','REV')}</div>
+    <div class="g2"><button class="b" data-a="pv" aria-label="Previous track">|&#9664;&#9664;</button><button class="b" data-a="nx" aria-label="Next track">&#9654;&#9654;|</button></div>
+    <div class="g2"><button class="b" data-a="j-4" aria-label="Search back">&#9664;&#9664;</button><button class="b" data-a="j4" aria-label="Search forward">&#9654;&#9654;</button></div>
     <button class="round cue">CUE</button><button class="round play" aria-label="Play / pause">&#9654;&#10074;&#10074;</button>
   </div>
-  <div class="jog" aria-label="Jog wheel"><div class="plat"></div><div class="disp"><i class="mark"></i><div><b>${i+1}</b><em>DECK</em></div></div></div>
+  <div class="jog" aria-label="Jog wheel"><div class="plat"></div><div class="disp"><i class="mark"></i><div><b>${i+1}</b><em class="jb">---</em></div></div></div>
   <div class="right">
-    <button class="b sync" style="--c:var(--blue)">BEAT SYNC</button>
-    <button class="b rng">&plusmn;10%</button>
-    <div class="fader vi tempo"><i></i></div>
-    <button class="b rst">RESET</button>
+    ${B('vinyl','VINYL')}${B('brake','BRAKE')}
+    <button class="b sync" style="--c:var(--blue)">BEAT SYNC</button><button class="b rng">&plusmn;10%</button>
+    <div class="fader vi tempo"><i></i></div><button class="b rst">TEMPO RESET</button>
   </div>
-</div>`}`;
+</div>`;
 
 class Deck{
   constructor(i,pro){
     this.i=i;this.el=$(`.deck[data-i="${i}"]`);this.el.innerHTML=deckHTML(i,pro);const q=s=>$(s,this.el);
-    Object.assign(this,{buf:null,src:null,playing:false,aPos:0,aTime:0,rate:1,bend:1,cue:0,hot:Array(pro?16:8).fill(null),dir:1,span:8,loop:null,loopIn:null,bpm:0,grid:0,ri:1,prev:false,delArm:false});
+    Object.assign(this,{buf:null,src:null,playing:false,aPos:0,aTime:0,rate:1,bend:1,cue:0,hot:Array(8).fill(null),dir:1,span:8,loop:null,loopIn:null,bpm:0,grid:0,ri:1,prev:false,delArm:false});
     this.trim=ctx.createGain();this.lo=bq('lowshelf',200);this.mid=bq('peaking',1000);this.hi=bq('highshelf',4000);
     this.filt=bq('lowpass',22000);this.an=ctx.createAnalyser();this.an.fftSize=512;this.fad=ctx.createGain();this.xf=ctx.createGain();
     [this.trim,this.lo,this.mid,this.hi,this.filt,this.fad,this.xf,bus].reduce((a,b)=>(a.connect(b),b));this.filt.connect(this.an);
@@ -335,31 +381,31 @@ class Deck{
   }
   setBpm(b,sh=0){if(!b)return;this.bpm=Math.round(b*10)/10;const bt=60/this.bpm;this.grid=((this.grid+sh)%bt+bt)%bt}
   setMode(m){
-    this.mode=m;$$('.tabs [data-a]',this.el).forEach((b,k)=>b.classList.toggle('on',k===m));
-    this.pads.forEach((p,k)=>{const v=Math.abs(JV[k])===.5?'1/2':Math.abs(JV[k]);
-      p.textContent=m===0?'ABCDEFGHIJKLMNOP'[k]:m===2?(JV[k]<0?'\u25c0 ':'')+v+(JV[k]>0?' \u25b6':''):LL[k];
-      p.classList.toggle('set',m===0&&this.hot[k]!=null);p.classList.toggle('lab',m!==0)});
+    this.mode=m;$$('.tabs [data-a^=m]',this.el).forEach((b,k)=>b.classList.toggle('on',k+1===m));
+    this.tps.forEach((p,k)=>{p.textContent=m===2?(JV[k]<0?'◀':'')+Math.abs(JV[k])+(JV[k]>0?'▶':''):LL[k]});
   }
-  padDown(k,sh){
+  padDown(k){
     if(!this.buf)return;const m=this.mode;
-    if(m===0)this.pad(k,sh);else if(m===1)this.beatLoop(LS[k]);else if(m===2)this.jump(JV[k]);
-    else{this.slipOn();this.roll=true;this.beatLoop(LS[k])}
+    if(m===1)this.beatLoop(LS[k]);else if(m===2)this.jump(JV[k]);else{this.slipOn();this.roll=true;this.beatLoop(LS[k])}
   }
   padUp(){if(this.roll){this.roll=false;if(this.loop&&this.loop.on)this.exitLoop();else this.slipOff()}}
+  next(d){
+    if(d<0&&(this.pos>1||!lib.length))return this.seek(0);if(!lib.length)return;
+    this.li=((this.li==null?-1:this.li)+d+lib.length)%lib.length;this.load(lib[this.li]);
+  }
   proInit(){
     const T=k=>b=>{this[k]=!this[k];b.classList.toggle('on',this[k])},l2=f=>()=>{const l=this.loop;if(l&&l.on)this.setLoop(l.a,l.a+(l.b-l.a)*f)};
     const A={slip:T('slip'),quant:T('quant'),vinyl:T('vinyl'),brake:T('brake'),
       rev:b=>{const was=this.playing;this.stop();this.dir=-this.dir;b.classList.toggle('on',this.dir<0);if(was)this.start()},
-      home:()=>this.seek(0),stop:()=>this.stop(),half:l2(.5),dbl:l2(2),tap:()=>this.tap(),
+      pv:()=>this.next(-1),nx:()=>this.next(1),half:l2(.5),dbl:l2(2),tap:()=>this.tap(),
       bh:()=>this.setBpm(this.bpm/2),bd:()=>this.setBpm(this.bpm*2),gl:()=>this.setBpm(this.bpm,-.005),gr:()=>this.setBpm(this.bpm,.005),
       zi:()=>{this.span=Math.max(2,this.span/2)},zo:()=>{this.span=Math.min(32,this.span*2)},cp:()=>this.call(-1),cn:()=>this.call(1)};
     this.el.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
-      if(A[a])A[a](b);else if(a[0]==='j')this.jump(+a.slice(1));else if(a[0]==='l')this.beatLoop(+a.slice(1));else this.setMode(+a.slice(1))});
-    $$('[data-bend]',this.el).forEach(b=>{b.onpointerdown=()=>this.setBend(+b.dataset.bend);
-      b.onpointerup=b.onpointerleave=b.onpointercancel=()=>{if(!this.held)this.setBend(1)}});
-    this.pads.forEach((p,k)=>{p.onclick=e=>{if(e.detail===0){this.padDown(k,e.shiftKey);this.padUp()}};
-      p.onpointerdown=e=>this.padDown(k,e.shiftKey);p.onpointerup=p.onpointerleave=p.onpointercancel=()=>this.padUp()});
-    this.setMode(0);
+      if(A[a])A[a](b);else if(a[0]==='j')this.jump(+a.slice(1));else this.setMode(+a.slice(1))});
+    this.jb=$('.jb',this.el);this.tps=$$('.tpad',this.el);
+    this.tps.forEach((p,k)=>{p.onclick=e=>{if(e.detail===0){this.padDown(k);this.padUp()}};
+      p.onpointerdown=()=>this.padDown(k);p.onpointerup=p.onpointerleave=p.onpointercancel=()=>this.padUp()});
+    this.setMode(1);
   }
   stop(){
     if(this.src){this.aPos=this.pos;const s=this.src;this.src=null;s.onended=null;try{s.stop()}catch(e){}s.disconnect()}
@@ -433,7 +479,7 @@ class Deck{
     j.onpointerup=j.onpointercancel=()=>{last=null;clearTimeout(tm);
       if(this.held){this.stop();this.held=false;this.dir=sd;this.bend=1;if(this.slip)this.slipOff();if(was)this.start()}else this.setBend(1)};
   }
-  fit(){const d=devicePixelRatio||1;for(const c of[this.zv,this.oc]){c.width=Math.round(c.clientWidth*d);c.height=Math.round(c.clientHeight*d)}this.renderOver()}
+  fit(){const d=devicePixelRatio||1;for(const c of[this.zv,this.oc]){const r=c.getBoundingClientRect();c.width=Math.round(r.width*d)||1;c.height=Math.round(r.height*d)||1}this.renderOver()}
   renderOver(){
     const o=this.oimg=document.createElement('canvas'),W=o.width=this.oc.width||1,H=o.height=this.oc.height||1;
     if(!this.buf)return;const g=o.getContext('2d'),n=this.pk.length;
@@ -448,7 +494,7 @@ class Deck{
     tog(this.cueB,'lit',!!b&&(this.prev||!this.playing&&Math.abs(p-this.cue)<.03));
     tog(this.reB,'on',!!(this.loop&&this.loop.on));
     if(!b)return;
-    txt(this.tE,fmt(p));txt(this.rE,'-'+fmt(b.duration-p));txt(this.bE,this.bpm?(this.bpm*this.rate).toFixed(1):'---');
+    txt(this.tE,fmt(p));txt(this.rE,'-'+fmt(b.duration-p));const bT=this.bpm?(this.bpm*this.rate).toFixed(1):'---';txt(this.bE,bT);txt(this.jb,bT);
     this.mark.style.setProperty('--r',(p/1.8*360%360).toFixed(1)+'deg');
     const d=devicePixelRatio||1,l=this.loop;
     // scrolling waveform
@@ -486,28 +532,41 @@ function level(an,el){
 }
 
 /* ---------- mixer ---------- */
-const decks=[new Deck(0),new Deck(1),new Deck(2,true)];
+const decks=[0,1,2,3].map(i=>new Deck(i,true));
+const rvb=ctx.createConvolver(),rvOut=ctx.createGain();
+{const n=ctx.sampleRate*2.6|0,ir=ctx.createBuffer(2,n,ctx.sampleRate);
+  for(let c=0;c<2;c++){const x=ir.getChannelData(c);for(let i=0;i<n;i++)x[i]=(Math.random()*2-1)*Math.pow(1-i/n,3)}
+  rvb.buffer=ir;rvb.connect(rvOut);rvOut.gain.value=.5;rvOut.connect(bus)}
+let cfx=0,xfv=.5;
+function setXf(){decks.forEach(d=>sp(d.xf.gain,d.xa==='A'?(xfv<=.5?1:Math.cos((xfv-.5)*Math.PI)):d.xa==='B'?(xfv>=.5?1:Math.cos((.5-xfv)*Math.PI)):1))}
 decks.forEach(d=>{
   const el=$(`.ch[data-ch="${d.i}"]`),n=d.i+1;
-  el.innerHTML=`<h4>CH ${n}</h4>`+['TRIM','HI','MID','LOW'].map(k=>`<div class="k"><div class="knob" data-k="${k}"></div>${k}</div>`).join('')+
-    `<div class="k"><div class="knob big" data-k="COLOR"></div>FILTER</div><div class="fv"><div class="vu"><i></i></div><div class="fader v"><i></i></div></div><button class="b xa" aria-label="Crossfader assign"></button>`;
+  el.innerHTML=`<h4>${n}</h4><div class="k"><div class="knob" data-k="TRIM"></div>TRIM</div><div class="eq"><div>`+
+    ['HI','MID','LOW'].map(k=>`<div class="k"><div class="knob" data-k="${k}"></div>${k}</div>`).join('')+
+    `<div class="k"><div class="knob big" data-k="COLOR"></div>COLOR</div></div><div class="vu"><i></i></div></div><div class="fader v"><i></i></div><button class="b xa" aria-label="Crossfader assign"></button>`;
   d.vu=$('.vu',el);
-  d.xa=['A','B','THRU'][d.i];const xb=$('.xa',el);xb.textContent='X-F '+d.xa;
+  // sound colour FX: filter (in the deck chain), dub echo (pre-fader), space reverb (post-fader send)
+  d.dS=ctx.createGain();d.dD=ctx.createDelay(1);d.dF=ctx.createGain();d.rS=ctx.createGain();
+  d.dS.gain.value=0;d.rS.gain.value=0;d.dD.delayTime.value=.357;d.dF.gain.value=.6;
+  d.filt.connect(d.dS);d.dS.connect(d.dD);d.dD.connect(d.dF);d.dF.connect(d.dD);d.dD.connect(d.fad);d.xf.connect(d.rS);d.rS.connect(rvb);
+  d.color=v=>{d.cv=v;const a=Math.abs(v);d.setFilter(cfx===0?v:0);
+    if(cfx===1)d.dD.delayTime.value=clamp(45/((d.bpm||126)*d.rate),.05,1);
+    sp(d.dS.gain,cfx===1?a:0);sp(d.rS.gain,cfx===2?a:0)};
+  d.xa=['A','A','B','B'][d.i];const xb=$('.xa',el);xb.textContent='X-F '+d.xa;
   xb.onclick=()=>{d.xa={A:'THRU',THRU:'B',B:'A'}[d.xa];xb.textContent='X-F '+d.xa;setXf()};
   const K=(k,on)=>ctl($(`[data-k=${k}]`,el),{label:`Channel ${n} ${k.toLowerCase()}`,on});
   const eq=node=>v=>sp(node.gain,v<0?v*26:v*6);
-  K('TRIM',v=>sp(d.trim.gain,Math.pow(10,v*12/20)));K('HI',eq(d.hi));K('MID',eq(d.mid));K('LOW',eq(d.lo));K('COLOR',v=>d.setFilter(v));
+  K('TRIM',v=>sp(d.trim.gain,Math.pow(10,v*12/20)));K('HI',eq(d.hi));K('MID',eq(d.mid));K('LOW',eq(d.lo));K('COLOR',v=>d.color(v));
   ctl($('.fader',el),{type:'v',min:0,max:1,val:1,label:`Channel ${n} fader`,on:v=>sp(d.fad.gain,v*v)});
 });
-let xfv=.5;
-function setXf(){decks.forEach(d=>sp(d.xf.gain,d.xa==='A'?(xfv<=.5?1:Math.cos((xfv-.5)*Math.PI)):d.xa==='B'?(xfv>=.5?1:Math.cos((.5-xfv)*Math.PI)):1))}
+$$('.cfx').forEach(b=>b.onclick=()=>{cfx=+b.dataset.c;$$('.cfx').forEach(x=>x.classList.toggle('on',x===b));decks.forEach(d=>d.color(d.cv||0))});
 ctl($('#xf'),{type:'h',min:0,max:1,val:.5,label:'Crossfader',on:x=>{xfv=x;setXf()}});
 ctl($('#mlev'),{min:0,max:1,val:.8,label:'Master level',on:v=>sp(masterG.gain,v*v*1.5)});
 ctl($('#edep'),{min:0,max:1,val:.6,label:'Echo depth',on:v=>{sp(eWet.gain,v);sp(eFb.gain,.25+v*.5)}});
 let eBeat=.5,eOn=false,eT=0;
 $('#eon').onclick=e=>{eOn=!eOn;e.target.classList.toggle('on',eOn);sp(eIn.gain,eOn?1:0)};
 $$('.beats .b').forEach(b=>b.onclick=()=>{eBeat=+b.dataset.b;$$('.beats .b').forEach(x=>x.classList.toggle('on',x===b))});
-const mvu=$('#mvu');
+const mvu=$('#mvu'),fxb=$('#fxb');
 
 /* ---------- library ---------- */
 const lib=[];
@@ -521,20 +580,29 @@ function addFiles(fs){
 }
 $('#add').onclick=()=>$('#pick').click();
 $('#pick').onchange=e=>{addFiles(e.target.files);e.target.value=''};
-$('#demo').onclick=()=>{decks[0].setBuffer(demo(126,55),'Demo beat A · 126 BPM');decks[1].setBuffer(demo(128,49),'Demo beat B · 128 BPM');decks[2].setBuffer(demo(124,61.7),'Demo beat C · 124 BPM')};
+const loadDemo=()=>[[126,55,'A'],[128,49,'B'],[124,61.7,'C'],[125,58.3,'D']].forEach(([b,r,n],i)=>decks[i].setBuffer(demo(b,r),`Demo beat ${n} · ${b} BPM`));
+$('#demo').onclick=loadDemo;
 addEventListener('dragover',e=>e.preventDefault());
 addEventListener('drop',e=>{e.preventDefault();const fs=[...e.dataTransfer.files];if(!fs.length)return;
   const dk=e.target.closest&&e.target.closest('.deck');addFiles(fs);if(dk)decks[+dk.dataset.i].load(fs[0])});
 
 /* ---------- keys, resize, render loop ---------- */
-const KEYS={KeyA:[0,'cue'],KeyS:[0,'play'],KeyK:[1,'cue'],KeyL:[1,'play'],KeyZ:[2,'cue'],KeyX:[2,'play']};
+const KEYS={KeyA:[0,'cue'],KeyS:[0,'play'],KeyD:[1,'cue'],KeyF:[1,'play'],KeyJ:[2,'cue'],KeyK:[2,'play'],KeyL:[3,'cue'],Semicolon:[3,'play']};
 addEventListener('keydown',e=>{const k=KEYS[e.code];if(!k||e.repeat||e.metaKey||e.ctrlKey||e.altKey)return;
   e.preventDefault();const d=decks[k[0]];k[1]==='play'?d.toggle():d.cueDown()});
 addEventListener('keyup',e=>{const k=KEYS[e.code];if(k&&k[1]==='cue')decks[k[0]].cueUp()});
-const fitAll=()=>decks.forEach(d=>d.fit());addEventListener('resize',fitAll);fitAll();
+const booth=$('#booth');let NAT=0;
+function layout(){ // one row like a real booth, scaled to fit; stacked when the screen is too narrow for that
+  booth.classList.remove('stack');booth.style.zoom=1;NAT=NAT||booth.offsetWidth;
+  const z=(document.documentElement.clientWidth-16)/NAT;
+  if(z<.6)booth.classList.add('stack');else booth.style.zoom=Math.min(1.4,z);
+  decks.forEach(d=>d.fit());
+}
+addEventListener('resize',layout);layout();setTimeout(loadDemo,60);
 (function tick(){
   decks.forEach(d=>d.draw());level(masterAn,mvu);
   const m=decks.find(d=>d.playing&&d.bpm)||decks.find(d=>d.bpm),t=clamp(60/(m?m.bpm*m.rate:126)*eBeat,.02,2);
+  txt(fxb,(m?m.bpm*m.rate:126).toFixed(1));
   if(Math.abs(t-eT)>.001){eT=t;eDl.delayTime.setTargetAtTime(t,ctx.currentTime,.05)}
   requestAnimationFrame(tick);
 })();
