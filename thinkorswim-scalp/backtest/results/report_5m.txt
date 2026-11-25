@@ -1,0 +1,31 @@
+# 5m bars, 2026-09-28 -> 2026-11-25 (43 trading days), symbols: SPY, QQQ, IWM
+
+## Rules: target 0.5 ATR, stop 2.0 ATR, max 6 bars
+symbol  trades  und_win%  opt_win%_no_costs  opt_win%_net  avg_win$  avg_loss$  expectancy$  total_net$  profit_factor
+   SPY     306     67.65              58.82         39.54      4.64     -13.28        -6.19    -1894.72           0.23
+   QQQ     288     67.36              56.94         46.88      4.44     -16.87        -6.88    -1982.10           0.23
+   IWM     308     72.08              63.64         37.99      2.18      -8.88        -4.68    -1440.99           0.15
+   ALL     902     69.07              59.87         41.35      3.80     -12.73        -5.90    -5317.81           0.21
+
+## Exit reasons (all symbols)
+             count   mean      sum
+exit_reason                       
+stop            85 -24.79 -2106.85
+target         604   1.41   853.36
+time           213 -19.08 -4064.32
+
+## Calls vs puts (all symbols)
+      count  mean      sum
+side                      
+CALL    434  -7.4 -3212.48
+PUT     468  -4.5 -2105.33
+
+## $50 account, one trade per day
+symbol  start$  end$  trades_taken  low$  max_drawdown%
+   SPY    50.0 27.81            11 27.81           55.3
+   QQQ    50.0 12.24             1 12.24           75.5
+   IWM    50.0 23.14             1 23.14           53.7
+
+## Same signals with an at-the-money contract (needs more than $50)
+ trades  und_win%  opt_win%_no_costs  opt_win%_net  avg_win$  avg_loss$  expectancy$  total_net$  profit_factor  avg_contract_cost$
+    902     69.07              64.63         58.87     16.85     -46.51        -9.21    -8307.15           0.52              163.01
