@@ -1,7 +1,7 @@
 # QQQBreakoutPuts  --  confirmed put breakouts with PUT / SELL callouts
 #
-# Install: Charts > Studies > Edit Studies > Strategies tab > Create...
-#          paste this file, name it QQQBreakoutPuts, click OK.
+# Install: Charts > Studies > Edit Studies > STRATEGIES tab (not Studies) >
+#          Create... paste this file, name it QQQBreakoutPuts, click OK.
 # Chart:   1-HOUR bars, regular hours only, on QQQ or a liquid stock.
 #
 # Buy a put when ALL of these are true on a bar that started between
@@ -55,7 +55,8 @@ def volAvg = Average(volume[1], 20);
 def priorLow = Lowest(low[1], breakoutLength);
 
 def confirmClose = close(symbol = confirmSymbol);
-def confirmPriorLow = Lowest(low(symbol = confirmSymbol)[1], breakoutLength);
+def confirmLow = low(symbol = confirmSymbol);
+def confirmPriorLow = Lowest(confirmLow[1], breakoutLength);
 def marketBreakDown = confirmClose < confirmPriorLow;
 
 def inWindow = SecondsFromTime(startTime) >= 0 and SecondsTillTime(endTime) >= 0;
@@ -69,19 +70,42 @@ def putSetup = inWindow
     and marketBreakDown;
 
 # ------------------------------------------------------------- position state
-# inPut: 1 while holding the put, measured after the current bar has finished.
+# inPut is 1 while the put is still held after the current bar has finished.
+# barsHeld counts the bars of the current trade, including the bar it is sold on.
 def inPut;
 def tradeEntry;
 def entryATR;
 def barsHeld;
+if (inPut[1] == 1) {
+    # a put was carried into this bar
+    tradeEntry = tradeEntry[1];
+    entryATR = entryATR[1];
+    barsHeld = barsHeld[1] + 1;
+    inPut = if high >= tradeEntry[1] + stopATR * entryATR[1]
+            or low <= tradeEntry[1] - targetATR * entryATR[1]
+            or barsHeld[1] + 1 >= maxBars
+            or flatBar
+            then 0 else 1;
+} else {
+    if (putSetup[1] and rth) {
+        # the previous bar signalled: this bar is the entry bar
+        tradeEntry = open;
+        entryATR = atrValue[1];
+        barsHeld = 1;
+        inPut = if high >= open + stopATR * atrValue[1]
+                or low <= open - targetATR * atrValue[1]
+                or maxBars <= 1
+                or flatBar
+                then 0 else 1;
+    } else {
+        tradeEntry = 0;
+        entryATR = 0;
+        barsHeld = 0;
+        inPut = 0;
+    }
+}
 
-def enterPut = putSetup[1] and inPut[1] == 0 and rth;
-def holdPut = enterPut or inPut[1] == 1;
-
-tradeEntry = if enterPut then open else if inPut[1] == 1 then tradeEntry[1] else 0;
-entryATR = if enterPut then atrValue[1] else if inPut[1] == 1 then entryATR[1] else 0;
-barsHeld = if enterPut then 1 else if inPut[1] == 1 then barsHeld[1] + 1 else 0;
-
+def holdPut = barsHeld > 0;
 def putTarget = tradeEntry - targetATR * entryATR;
 def putStop = tradeEntry + stopATR * entryATR;
 
@@ -90,13 +114,13 @@ def stopHit = holdPut and high >= putStop;
 def targetHit = holdPut and !stopHit and low <= putTarget;
 def timeExit = holdPut and !stopHit and !targetHit and (barsHeld >= maxBars or flatBar);
 def putExit = stopHit or targetHit or timeExit;
-
-inPut = if holdPut and !putExit then 1 else 0;
+def barsLeft = maxBars - barsHeld;
 
 def putSignal = putSetup and inPut == 0;
 
 # -------------------------------------------------------------------- orders
-# thinkorswim draws each order on the bar after its condition is true.
+# These four lines only work when the script is saved under the STRATEGIES tab.
+# If you created it under Studies, delete them; the callouts still work.
 AddOrder(OrderType.SELL_TO_OPEN, putSignal, open[-1], tradeSize, Color.RED, Color.RED, "PUT");
 AddOrder(OrderType.BUY_TO_CLOSE, stopHit, Max(open, putStop), tradeSize, Color.RED, Color.RED, "Stop");
 AddOrder(OrderType.BUY_TO_CLOSE, targetHit, Min(open, putTarget), tradeSize, Color.GREEN, Color.GREEN, "Target");
@@ -119,14 +143,14 @@ AddLabel(putExit,
 AddLabel(yes,
     if putSignal then "BUY PUT  (enter next bar)"
     else if inPut == 1 then "IN PUT - HOLD   sell if price falls to " + Round(putTarget, 2)
-        + " or rises to " + Round(putStop, 2) + "   bars left: " + (maxBars - barsHeld)
+        + " or rises to " + Round(putStop, 2) + "   bars left: " + barsLeft
     else if putExit then "NO POSITION after this sale"
     else if !inWindow then "NO TRADE  (outside trading window)"
     else "NO TRADE  (waiting for setup)",
     if putSignal or inPut == 1 then Color.RED else Color.GRAY);
 
 AddLabel(yes,
-    confirmSymbol + (if marketBreakDown then ": breaking down" else ": not breaking down"),
+    if marketBreakDown then "Market confirm: breaking down" else "Market confirm: not breaking down",
     if marketBreakDown then Color.DARK_RED else Color.DARK_GRAY);
 
 # --------------------------------------------------------------------- plots
