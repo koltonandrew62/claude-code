@@ -1,0 +1,12 @@
+# 1m bars, train 2026-10-28 -> 2026-11-16 (14 days), held back 2026-11-17 -> 2026-11-25 (7 days)
+
+## Best setting per rule, chosen on the training days only
+  strategy  target  stop  hold  train_n  train_win%  train_exp$  train_t  test_n  test_win%  test_exp$  test_t
+exhaustion    99.0   1.0     3      303       23.10       -2.62    -3.53     163      16.56      -5.91   -9.52
+     burst     2.0   1.0     3      140       25.00       -3.11    -4.21      88      32.95      -1.62   -1.23
+  breakout     2.0   1.0     3      260       26.15       -3.19    -6.61     149      36.24      -1.66   -1.71
+  pullback    99.0   2.0     3     1464       23.22       -3.56   -17.18     797      27.85      -4.57  -13.55
+      rsi2     2.0   1.0     3      331       21.75       -3.58    -9.41     184      23.37      -5.37   -8.97
+ band_fade    99.0   1.0     3      194       19.07       -4.05    -7.39      95      29.47      -3.67   -3.85
+
+0 of 96 settings were profitable in training; 0 of those were also profitable on the held-back days.

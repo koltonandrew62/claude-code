@@ -14,22 +14,36 @@ from pathlib import Path
 
 DATA = Path(__file__).parent / "data"
 SYMBOLS = ["SPY", "QQQ", "IWM", "^VIX", "^VXN"]
-SPECS = {"5m": 59, "1h": 729, "1d": 3660}  # interval -> lookback days
+SPECS = {"1m": 29, "5m": 59, "1h": 729}  # interval -> lookback days
+CHUNK_DAYS = {"1m": 7}  # Yahoo serves 1-minute bars at most 8 days per request
 
 
 def fetch(symbol, interval, days):
     now = int(time.time())
+    chunk = CHUNK_DAYS.get(interval)
+    if chunk and days > chunk:
+        rows, start = {}, now - days * 86400
+        while start < now:
+            for r in fetch_range(symbol, interval, start, min(start + chunk * 86400, now)):
+                rows[r[0]] = r
+            start += chunk * 86400
+            time.sleep(0.5)
+        return [rows[k] for k in sorted(rows)]
+    return fetch_range(symbol, interval, now - days * 86400, now)
+
+
+def fetch_range(symbol, interval, start, end):
     url = (
         "https://query1.finance.yahoo.com/v8/finance/chart/"
         + urllib.parse.quote(symbol)
-        + f"?interval={interval}&period1={now - days * 86400}&period2={now}"
+        + f"?interval={interval}&period1={start}&period2={end}"
     )
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=60) as r:
         res = json.load(r)["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
     rows = []
-    for i, ts in enumerate(res["timestamp"]):
+    for i, ts in enumerate(res.get("timestamp", [])):
         o, h, l, c, v = (q[k][i] for k in ("open", "high", "low", "close", "volume"))
         if None in (o, h, l, c):
             continue

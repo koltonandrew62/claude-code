@@ -1,32 +1,41 @@
-# ScalpCallPut  --  VWAP / EMA pullback scalp with CALL / PUT callouts
+# ScalpCallPut  --  1-minute options scalp with CALL / PUT callouts
 #
 # Install: Charts > Studies > Edit Studies > Strategies tab > Create...
 #          paste this file, name it ScalpCallPut, click OK.
-# Chart:   5-minute bars, regular hours, on a liquid underlying (SPY, QQQ, IWM).
+# Chart:   1-minute bars, regular hours, on a liquid underlying (SPY, QQQ, IWM).
 #
 # What it does
-#   CALL when price is above session VWAP, EMA(9) is above EMA(21), the bar
-#        dipped to the EMA(9) and closed back above it as a green bar.
-#   PUT  is the mirror image below VWAP.
-#   A bubble marks every signal bar, and the label in the top-left corner says
-#   what to do right now. Entry is the open of the next bar.
-#   Exit: profit target and stop measured in ATR, a bar-count time stop, and a
-#   hard flatten before the close.
+#   Pick one of eight entry rules with the "rule" input. Each rule marks a
+#   CALL or a PUT. A bubble marks every signal bar, and the label in the
+#   top-left corner says what to do right now. Entry is the open of the next
+#   bar. The trade is closed at the target, at the stop, or after maxBars
+#   one-minute bars, whichever comes first.
+#
+#   Pullback    with the trend, dip to EMA(9) and close back through it
+#   Burst       wide high-volume bar closing near its extreme, on the VWAP side
+#   Breakout    close beyond the 30-bar high/low on 1.5x volume, on the VWAP side
+#   PowerHour   the Breakout rule, 15:00 onward only
+#   ORB         first close outside the 9:30-9:45 range, before 11:30
+#   BandFade    close back inside a 2.5 SD band after closing outside it
+#   RSI2        with the trend, RSI(2) washout then a bar back in the trend's favour
+#   Exhaustion  fade three straight bars that travelled at least 2.5 ATR
+#
+# None of these rules was profitable in the option backtest. See README.md.
 #
 # thinkorswim strategies simulate trades on the chart symbol, not on options.
 # The orders below therefore show the underlying move; the option to buy is the
-# one named in the bubble (same-day or nearest expiry). See README.md for the
-# option backtest and its results.
+# one named in the bubble (same-day expiry).
 
-input startTime = 0945;      # first bar allowed to signal (US/Eastern)
-input endTime = 1500;        # last bar allowed to signal
-input flatTime = 1550;       # close anything still open on this bar
+input rule = {default Breakout, Pullback, Burst, PowerHour, ORB, BandFade, RSI2, Exhaustion};
+input startTime = 0935;      # first bar allowed to signal (US/Eastern)
+input endTime = 1550;        # last bar allowed to signal
+input flatTime = 1555;       # close anything still open on this bar
 input fastLength = 9;
 input slowLength = 21;
 input atrLength = 14;
-input targetATR = 0.5;       # profit target, in ATRs of the underlying
-input stopATR = 2.0;         # stop, in ATRs of the underlying
-input maxBars = 6;           # time stop, in bars
+input targetATR = 2.0;       # profit target, in ATRs of the underlying
+input stopATR = 1.0;         # stop, in ATRs of the underlying
+input maxBars = 5;           # time stop, in bars (3 to 5 for this scalp)
 input tradeSize = 100;       # shares shown in the strategy report
 input showBubbles = yes;
 input showLevels = yes;
@@ -49,8 +58,58 @@ def flatBar = SecondsFromTime(flatTime) >= 0 or !rth;
 # ------------------------------------------------------------------- signals
 def trendUp = close > sessionVWAP and emaFast > emaSlow;
 def trendDown = close < sessionVWAP and emaFast < emaSlow;
-def callSetup = inWindow and trendUp and low <= emaFast and close > emaFast and close > open;
-def putSetup = inWindow and trendDown and high >= emaFast and close < emaFast and close < open;
+
+def barRange = high - low;
+def barPos = if barRange > 0 then (close - low) / barRange else 0.5;
+def volAvg = Average(volume[1], 20);
+def highVolume = volume >= 1.5 * volAvg;
+def priorHigh = Highest(high[1], 30);
+def priorLow = Lowest(low[1], 30);
+def bandMid = Average(close, 20);
+def bandSD = StDev(close, 20);
+def upperBand = bandMid + 2.5 * bandSD;
+def lowerBand = bandMid - 2.5 * bandSD;
+def rsiFast = RSI(length = 2);
+def inOpeningRange = SecondsFromTime(0930) >= 0 and SecondsTillTime(0945) > 0;
+def orHigh = if newSession then high else if inOpeningRange then Max(orHigh[1], high) else orHigh[1];
+def orLow = if newSession then low else if inOpeningRange then Min(orLow[1], low) else orLow[1];
+def orbWindow = SecondsFromTime(0945) >= 0 and SecondsTillTime(1130) >= 0;
+def lastHour = SecondsFromTime(1500) >= 0;
+def redBar = close < open;
+def greenBar = close > open;
+def threeBarDrop = open[2] - close;
+
+def callRule;
+def putRule;
+switch (rule) {
+case Pullback:
+    callRule = trendUp and low <= emaFast and close > emaFast and greenBar;
+    putRule = trendDown and high >= emaFast and close < emaFast and redBar;
+case Burst:
+    callRule = barRange >= 1.5 * atrValue[1] and highVolume and barPos >= 0.75 and greenBar and close > sessionVWAP;
+    putRule = barRange >= 1.5 * atrValue[1] and highVolume and barPos <= 0.25 and redBar and close < sessionVWAP;
+case Breakout:
+    callRule = highVolume and close > priorHigh and close > sessionVWAP;
+    putRule = highVolume and close < priorLow and close < sessionVWAP;
+case PowerHour:
+    callRule = lastHour and highVolume and close > priorHigh and close > sessionVWAP;
+    putRule = lastHour and highVolume and close < priorLow and close < sessionVWAP;
+case ORB:
+    callRule = orbWindow and volume >= volAvg and close > orHigh and close[1] <= orHigh;
+    putRule = orbWindow and volume >= volAvg and close < orLow and close[1] >= orLow;
+case BandFade:
+    callRule = close[1] < lowerBand[1] and close > lowerBand and greenBar;
+    putRule = close[1] > upperBand[1] and close < upperBand and redBar;
+case RSI2:
+    callRule = trendUp and rsiFast[1] < 10 and greenBar;
+    putRule = trendDown and rsiFast[1] > 90 and redBar;
+case Exhaustion:
+    callRule = redBar and redBar[1] and redBar[2] and threeBarDrop >= 2.5 * atrValue[3];
+    putRule = greenBar and greenBar[1] and greenBar[2] and -threeBarDrop >= 2.5 * atrValue[3];
+}
+
+def callSetup = inWindow and callRule;
+def putSetup = inWindow and putRule;
 
 # ------------------------------------------------------------- position state
 # position:  1 = holding the call side, -1 = holding the put side, 0 = flat,
@@ -120,7 +179,7 @@ AddLabel(yes,
     else Color.GRAY);
 
 AddLabel(yes,
-    "Trend: " + (if trendUp then "UP - calls only" else if trendDown then "DOWN - puts only" else "MIXED - stand aside"),
+    "Trend: " + (if trendUp then "UP" else if trendDown then "DOWN" else "MIXED"),
     if trendUp then Color.DARK_GREEN else if trendDown then Color.DARK_RED else Color.DARK_GRAY);
 
 # --------------------------------------------------------------------- plots

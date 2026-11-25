@@ -31,6 +31,7 @@ IV_SCALE = 0.8
 
 @dataclass(frozen=True)
 class Params:
+    strategy: str = "pullback"
     fast: int = 9
     slow: int = 21
     atr_len: int = 14
@@ -83,14 +84,97 @@ def add_indicators(df, p):
     tr = pd.concat([out.high - out.low, (out.high - prev_close).abs(), (out.low - prev_close).abs()], axis=1).max(axis=1)
     out["atr"] = tr.ewm(alpha=1 / p.atr_len, adjust=False).mean()  # Wilder, as in thinkScript ATR()
 
+    # extras used by the alternative signal rules
+    out["rng"] = out.high - out.low
+    out["bar_pos"] = ((out.close - out.low) / out.rng.where(out.rng > 0)).fillna(0.5)
+    out["vol_avg"] = out.volume.rolling(20).mean().shift()
+    out["hh"] = out.high.rolling(30).max().shift()
+    out["ll"] = out.low.rolling(30).min().shift()
+    mid = out.close.rolling(20).mean()
+    sd = out.close.rolling(20).std(ddof=0)
+    out["bb_up"], out["bb_dn"] = mid + 2.5 * sd, mid - 2.5 * sd
+    delta = out.close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=0.5, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=0.5, adjust=False).mean()
+    out["rsi2"] = 100 - 100 / (1 + gain / loss.where(loss > 0, 1e-12))
     t = out.index.strftime("%H:%M")
+    out["hhmm"] = t
+    opening = out[t < "09:45"]
+    out["or_high"] = out.date.map(opening.groupby("date").high.max())
+    out["or_low"] = out.date.map(opening.groupby("date").low.min())
+
     window = (t >= p.start) & (t <= p.end)
-    up = (out.close > out.vwap) & (out.ema_f > out.ema_s)
-    down = (out.close < out.vwap) & (out.ema_f < out.ema_s)
-    out["sig_call"] = window & up & (out.low <= out.ema_f) & (out.close > out.ema_f) & (out.close > out.open)
-    out["sig_put"] = window & down & (out.high >= out.ema_f) & (out.close < out.ema_f) & (out.close < out.open)
+    call, put = SIGNALS[p.strategy](out)
+    out["sig_call"] = (window & call).fillna(False).astype(bool)
+    out["sig_put"] = (window & put).fillna(False).astype(bool)
     out["is_flat_bar"] = t >= p.flat
     return out.iloc[p.slow * 3:]  # let the averages warm up
+
+
+# ----------------------------------------------------------------- signal rules
+# Each rule returns (call_signal, put_signal) for the bar that just closed.
+
+def sig_pullback(d):
+    """Trend pullback: with the trend, dip to the fast EMA and close back through it."""
+    up = (d.close > d.vwap) & (d.ema_f > d.ema_s)
+    down = (d.close < d.vwap) & (d.ema_f < d.ema_s)
+    return (up & (d.low <= d.ema_f) & (d.close > d.ema_f) & (d.close > d.open),
+            down & (d.high >= d.ema_f) & (d.close < d.ema_f) & (d.close < d.open))
+
+
+def sig_burst(d):
+    """Momentum burst: a wide, high-volume bar closing near its extreme, on the VWAP side."""
+    big = (d.rng >= 1.5 * d.atr.shift()) & (d.volume >= 1.5 * d.vol_avg)
+    return (big & (d.bar_pos >= 0.75) & (d.close > d.open) & (d.close > d.vwap),
+            big & (d.bar_pos <= 0.25) & (d.close < d.open) & (d.close < d.vwap))
+
+
+def sig_breakout(d):
+    """30-bar high/low breakout on above-average volume, on the VWAP side."""
+    vol = d.volume >= 1.5 * d.vol_avg
+    return (vol & (d.close > d.hh) & (d.close > d.vwap), vol & (d.close < d.ll) & (d.close < d.vwap))
+
+
+def sig_power_hour(d):
+    """The same breakout, but only in the last hour when near-the-money contracts are cheap."""
+    call, put = sig_breakout(d)
+    late = d.hhmm >= "15:00"
+    return call & late, put & late
+
+
+def sig_orb(d):
+    """Opening-range breakout: first close outside the 9:30-9:45 range, before 11:30."""
+    early = (d.hhmm >= "09:45") & (d.hhmm <= "11:30") & (d.volume >= d.vol_avg)
+    return (early & (d.close > d.or_high) & (d.close.shift() <= d.or_high),
+            early & (d.close < d.or_low) & (d.close.shift() >= d.or_low))
+
+
+def sig_band_fade(d):
+    """Mean reversion: previous bar closed outside a 2.5 SD band, this bar closes back inside."""
+    return ((d.close.shift() < d.bb_dn.shift()) & (d.close > d.bb_dn) & (d.close > d.open),
+            (d.close.shift() > d.bb_up.shift()) & (d.close < d.bb_up) & (d.close < d.open))
+
+
+def sig_rsi2(d):
+    """With the trend, buy a 2-period RSI washout once a bar closes back in the trend's favour."""
+    up = (d.close > d.vwap) & (d.ema_f > d.ema_s)
+    down = (d.close < d.vwap) & (d.ema_f < d.ema_s)
+    return (up & (d.rsi2.shift() < 10) & (d.close > d.open), down & (d.rsi2.shift() > 90) & (d.close < d.open))
+
+
+def sig_exhaustion(d):
+    """Fade three straight bars that together travelled at least 2.5 ATR."""
+    red = d.close < d.open
+    green = d.close > d.open
+    drop = d.open.shift(2) - d.close
+    return (red & red.shift(1, fill_value=False) & red.shift(2, fill_value=False) & (drop >= 2.5 * d.atr.shift(3)),
+            green & green.shift(1, fill_value=False) & green.shift(2, fill_value=False) & (-drop >= 2.5 * d.atr.shift(3)))
+
+
+SIGNALS = {
+    "pullback": sig_pullback, "burst": sig_burst, "breakout": sig_breakout, "power_hour": sig_power_hour,
+    "orb": sig_orb, "band_fade": sig_band_fade, "rsi2": sig_rsi2, "exhaustion": sig_exhaustion,
+}
 
 
 # ------------------------------------------------------------------ option model
@@ -204,6 +288,7 @@ def stats(tr):
         "expectancy$": tr.opt_net.mean(),
         "total_net$": tr.opt_net.sum(),
         "profit_factor": wins.sum() / -losses.sum() if losses.sum() < 0 else float("inf"),
+        "t_stat": tr.opt_net.mean() / (tr.opt_net.std(ddof=1) / math.sqrt(len(tr))) if len(tr) > 2 and tr.opt_net.std() > 0 else 0.0,
     }
 
 
@@ -227,6 +312,11 @@ def run_account(tr, start_cash=50.0, commission=0.65):
             "max_drawdown%": round(100 * ((peak - eq) / peak).max(), 1) if len(eq) else 0.0}
 
 
+def for_one_minute(p):
+    """Clock settings for 1-minute bars: trade 9:35-15:50, flat by 15:55."""
+    return replace(p, start="09:35", end="15:50", flat="15:55")
+
+
 # ----------------------------------------------------------------------- reports
 
 GRID_TARGET = [0.25, 0.5, 0.75, 1.0, 1.5]
@@ -239,7 +329,8 @@ def fmt(d):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--interval", default="5m", choices=["5m", "1h"])
+    ap.add_argument("--interval", default="5m", choices=["1m", "5m", "1h"])
+    ap.add_argument("--strategy", default="pullback", choices=sorted(SIGNALS))
     ap.add_argument("--symbols", nargs="+", default=["SPY", "QQQ", "IWM"])
     ap.add_argument("--target-atr", type=float, default=Params.target_atr)
     ap.add_argument("--stop-atr", type=float, default=Params.stop_atr)
@@ -252,7 +343,9 @@ def main():
     a = ap.parse_args()
     pd.set_option("display.width", 200)
 
-    base = Params(target_atr=a.target_atr, stop_atr=a.stop_atr, max_bars=a.max_bars)
+    base = Params(strategy=a.strategy, target_atr=a.target_atr, stop_atr=a.stop_atr, max_bars=a.max_bars)
+    if a.interval == "1m":
+        base = for_one_minute(base)
     if a.interval == "1h":  # hourly bars: same rules, wider clock window
         base = replace(base, start="10:30", end="14:30", flat="15:30", max_bars=min(a.max_bars, 3))
     costs = Costs(slippage=a.slippage, commission=a.commission)
