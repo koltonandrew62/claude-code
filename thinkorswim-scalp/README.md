@@ -1,8 +1,13 @@
 # ScalpCallPut: thinkorswim option day-trade signals, and what the backtests say
 
-**Result up front: the breakout rule got better by dropping calls and waiting for the wider market to confirm. It is still a small-sample result.**
+**Result up front: the current best version wins about three trades in four on QQQ and eight large stocks, but whether it makes real money depends on something the model cannot settle.**
 
-- **Improved breakout (puts only, market confirmed), $1,600 account:** 18 trades in two years, 61% winners, $1,600 to $2,886.60, largest drop 14.4%. Three trades made almost all of that profit.
+- **Confirmed put breakouts with a quick target (QQQ and stocks), $1,600 account:** 103 trades in two years, 77% winners.
+  - If put prices inflate with the volatility index during selloffs, as modelled: $1,600 to $4,556.10.
+  - If the put's volatility stays flat: $1,600 to $1,957.70. Add doubled slippage and it slips to a small loss.
+- **That same caveat applies to every breakout profit reported below.** Most of the modelled profit is volatility rising while the put is held, not the price move.
+- **All 141 signals fell on just 30 days in two years.** It trades selloff days and nothing else.
+- **Earlier improved breakout (puts only, market confirmed, no target):** 18 trades in two years, 61% winners, $1,600 to $2,886.60.
 - **Why puts only:** on 13 stocks and ETFs the rule had never seen, calls lost $35.67 a trade over 149 trades. That is the most reliable finding in this whole project.
 - **Original breakout, no target:** 45% winners, $1,600 to $2,664.30.
 - **Breakout with a quick target (over 60% winners):** roughly break-even; the account lost $74.20.
@@ -18,8 +23,10 @@ Only calls and puts are ever bought; nothing is sold short. All trades are simul
 
 | File | What it is |
 | --- | --- |
-| `ScalpCallPut_STRATEGY.ts` | The thinkScript strategy: eight selectable rules, CALL / PUT / SELL bubbles, status labels |
-| `BreakoutPutsAccount.xlsx` | The made-up $1,600 account trading the improved breakout rule |
+| `ScalpCallPut_STRATEGY.ts` | The multi-rule research script: eight selectable rules, CALL / PUT / SELL bubbles |
+| `QQQBreakoutPuts_STRATEGY.ts` | **The current script**: confirmed put breakouts for QQQ and stocks, PUT / SELL callouts |
+| `QQQStocksAccount.xlsx` | The made-up $1,600 account trading it, under both pricing assumptions |
+| `BreakoutPutsAccount.xlsx` | The earlier improved breakout rule (no target) on SPY, QQQ and IWM |
 | `LongerHoldAccount.xlsx` | The made-up $1,600 account with longer holds (three earlier versions) |
 | `ScalpAccount.xlsx` | The made-up $50 account with the 1-minute scalp |
 | `TenYearPlan.xlsx` | What $1,600 to $3.2 million requires, the every-strategy account, and ten-year projections |
@@ -31,6 +38,69 @@ Only calls and puts are ever bought; nothing is sold short. All trades are simul
 | `backtest/account_longer.py`, `backtest/account.py` | Simulate the two accounts and write the spreadsheets |
 | `backtest/fetch_data.py` | Downloads the bars from Yahoo Finance |
 | `backtest/data/`, `backtest/results/` | The bars used, and the reports and trade lists |
+
+## Trading more often on QQQ and stocks (`QQQBreakoutPuts_STRATEGY.ts`)
+
+Universe: QQQ, AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD. Hourly bars, two years.
+
+### The rule
+
+Buy a put when, on an hourly bar that started between 10:30 and 13:30:
+
+1. price closes below the lowest low of the previous 30 bars,
+2. the bar's volume is at least its 20-bar average,
+3. price closes below the session VWAP, and
+4. SPY also closes below its own 30-bar low on the same bar.
+
+Enter at the next bar's open. Sell when price has fallen 0.5 ATR (target), risen 1.5 ATR (stop), or after 4 hourly bars.
+Contract: a put about 5 trading days from expiry, nearest the money, $4.00 or less.
+
+### How it was chosen
+
+54 looser versions of the earlier rule were tried: three lookbacks, three volume bars, two trading windows, three targets.
+16 made money on QQQ and on the stocks, and made money while winning at least half their trades in both the first 330 and the last 170 days.
+Every version with the 0.5 ATR target and the 10:30-13:30 window passed. No version with the wider 9:30-14:30 window did.
+The adopted one keeps the 30-bar lookback and changes two things: volume of 1.0x instead of 1.5x, and the quick target.
+
+| On QQQ and the eight stocks | Signals | Per year | Win rate | Average per trade |
+| --- | ---: | ---: | ---: | ---: |
+| Earlier improved rule (1.5x volume, no target) | 52 | 26 | 46.2% | $39.23 |
+| **Adopted rule** | 141 | 71 | 74.5% | $33.23 |
+| ...first 330 days | 76 | | 73.7% | $26.92 |
+| ...last 170 days | 65 | | 75.4% | $40.61 |
+| ...QQQ only | 34 | | 82.4% | $35.64 |
+| ...stocks only | 107 | | 72.0% | $32.46 |
+| More trades still (15-bar lookback) | 226 | 114 | 69.5% | $20.93 |
+
+### The stress test, which matters more than the table above
+
+| Assumption | Win rate | Average per trade | Total over two years |
+| --- | ---: | ---: | ---: |
+| As modelled | 74.5% | $33.23 | +$4,685 |
+| Slippage doubled | 71.6% | $27.71 | +$3,907 |
+| Put's implied volatility held flat during the trade | 70.2% | $3.05 | +$430 |
+| Volatility flat and slippage doubled | 68.8% | -$2.47 | -$348 |
+
+- **Where the profit comes from.** The model reprices each put with the volatility index at the moment of sale. That index jumps when the market breaks down, so the put gains value beyond the price move. Hold volatility flat and nine tenths of the profit is gone.
+- **Why the model probably overstates it.** Real out-of-the-money puts already cost more than the index implies, and their own volatility rises less than the index does when price falls toward them. For single stocks the model scales the VIX, which exaggerates this further.
+- **What is solid.** The win rate stays near 70% either way, and the price itself keeps falling after these signals: about 27 hundredths of a percent on average, in the right direction 75% of the time.
+- **It is 30 days, not 141 trades.** All signals fell on 30 separate days, because the stocks and QQQ break down together. Judged day by day, 77% of those days made money, and the five best days made $4,178 of the $4,685.
+- **The same test on the earlier rule:** $39.23 a trade as modelled, -$5.65 with volatility flat.
+
+Only real option quotes can settle this. Replaying two or three of these selloff days in thinkorswim's OnDemand would show which column is closer.
+
+### The made-up $1,600 account (`QQQStocksAccount.xlsx`)
+
+Up to three positions at once (QQQ first when several signal together), about 5% of the balance per trade and never less than one contract.
+
+| | As modelled | If put volatility stays flat |
+| --- | ---: | ---: |
+| Trades | 103 | 91 |
+| Win rate | 76.7% | 76.9% |
+| Average win / average loss | $65.38 / -$92.05 | $33.74 / -$95.44 |
+| Net result | +$2,956.10 | +$357.70 |
+| Ending balance | $4,556.10 | $1,957.70 |
+| Largest drop from a high | 16.5% | 33.1% |
 
 ## Making the breakout better (`backtest/breakout_lab.py`)
 
@@ -348,7 +418,7 @@ Across every target and stop tested (`backtest/results/grid_5m.txt`) no setting 
 ## Running it in thinkorswim
 
 1. Charts > Studies > Edit Studies > Strategies tab > Create. Paste `ScalpCallPut_STRATEGY.ts`, name it, OK.
-2. Use a 1-hour chart of SPY, QQQ or IWM; the script's defaults are the improved breakout (puts only, market confirmed). Set `confirmSymbol` to QQQ on a SPY chart and to SPY on any other chart. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
+2. For QQQ and stocks paste `QQQBreakoutPuts_STRATEGY.ts` instead and use a 1-hour chart. Leave `confirmSymbol` as SPY. For the 1-minute scalp, use a 1-minute chart and the settings listed at the top of the script.
 3. Right-click an order arrow > Show Report for the underlying P&L.
 4. To test with real historical option prices, use **OnDemand** (top right of the main window). It replays past sessions with the option chain as it traded, on a simulated account. Follow the bubbles and place the trades by hand.
 5. For live paper trading, log in to paperMoney and set the balance to $1,600 from the account adjustment option on the Monitor tab.
@@ -377,6 +447,22 @@ python3 backtest/breakout_lab.py
 
 ```bash
 python3 backtest/breakout_lab.py account
+```
+
+```bash
+python3 backtest/breakout_lab.py more
+```
+
+```bash
+python3 backtest/breakout_lab.py mine
+```
+
+```bash
+python3 backtest/breakout_lab.py stress
+```
+
+```bash
+python3 backtest/breakout_lab.py final
 ```
 
 ```bash

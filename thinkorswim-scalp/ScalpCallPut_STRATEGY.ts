@@ -20,6 +20,9 @@
 #   RSI2        with the trend, RSI(2) washout then a bar back in the trend's favour
 #   Exhaustion  fade three straight bars that travelled at least 2.5 ATR
 #
+# For QQQ and individual stocks, use QQQBreakoutPuts_STRATEGY.ts instead: it is
+#   the current best version (confirmed put breakouts with a quick target).
+#   This file is the multi-rule research script.
 # Defaults: the improved breakout for a $1,600 account. 1-HOUR chart, Breakout
 #   rule, PUTS ONLY, and only when the wider market (confirmSymbol) is also
 #   below its own 30-bar low. Stop 1.5 ATR, no target, sell after 4 bars,

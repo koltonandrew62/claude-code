@@ -49,6 +49,7 @@ class Costs:
     commission: float = 0.65    # $ per contract, per side
     premium_cap: float = 0.45   # most a $50 account can pay for one contract
     dte: int = 0                # trading days until expiry; 0 = expires today
+    freeze_iv: bool = False     # stress test: price the exit at the entry's implied volatility
 
 
 # --------------------------------------------------------------------------- data
@@ -262,7 +263,8 @@ def simulate(df, p, costs, cap="default"):
         strike = pick_strike(entry, entry_min, iv[i], is_call, cap)
         if strike is not None:
             buy = bs_price(entry, strike, entry_min, iv[i], is_call) + costs.slippage
-            sell_mid = bs_price(exit_px, strike, minutes_to_close(exit_ts) + extra_min, iv[j], is_call)
+            exit_iv = iv[i] if costs.freeze_iv else iv[j]
+            sell_mid = bs_price(exit_px, strike, minutes_to_close(exit_ts) + extra_min, exit_iv, is_call)
             sell = max(sell_mid - costs.slippage, 0.0)
             gross = (sell_mid - (buy - costs.slippage)) * 100
             net = (sell - buy) * 100 - 2 * costs.commission
