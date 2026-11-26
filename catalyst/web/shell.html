@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Catalyst</title>
+<style>
+/*CSS*/
+#banner{display:none;margin:0 0 16px;padding:12px 16px;border:1px solid var(--down);border-radius:12px;background:rgba(230,103,103,.1);color:var(--ink)}#banner.on{display:block}
+#live{margin-left:auto;color:var(--ink3);font-size:12px;display:flex;gap:8px;align-items:center}#live i{width:7px;height:7px;border-radius:50%;background:var(--ink3)}#live.ok i{background:var(--up)}#live.bad i{background:var(--down)}
+.fcell b{font-weight:600}.fcell i{font-style:normal}.fcell .u{color:var(--up)}.fcell .d{color:var(--down)}
+.about{color:var(--ink2);font-size:13px;line-height:1.55}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="#2b2b33"/><circle cx="12" cy="12" r="6" stroke="#6c6c78"/><path d="M12 12 19.5 6" stroke="#c8ff3e" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#c8ff3e"/></svg>CATALYST</div>
+  <form id="search"><input id="q" placeholder="Analyze any ticker…" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
+  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button></nav>
+  <div id="live"><i></i><span>Connecting…</span></div>
+</header>
+<main>
+  <div id="banner"></div>
+  <section id="v-screener" class="view on">
+    <aside class="panel">
+      <div class="ph"><h2>Screen</h2><button class="ghost" id="reset">Reset</button></div>
+      <label class="f">Universe<select id="uni"></select></label>
+      <textarea id="custom" rows="2" placeholder="…or paste your own tickers: AAPL, VRTX, QQQ"></textarea>
+      <button class="primary" id="run">Run screen</button>
+      <div class="chips" id="screens"></div>
+      <div id="crit"></div>
+    </aside>
+    <div class="panel">
+      <div class="ph"><h2 id="count">Results</h2></div>
+      <div id="bar"><i></i></div>
+      <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+  </section>
+  <section id="v-options" class="view"><div class="feed wide" id="options"></div></section>
+  <section id="v-calendar" class="view"><div class="feed" id="calendar"></div></section>
+</main>
+<div id="scrim" data-close></div>
+<aside id="drawer" aria-label="Company detail"></aside>
+<div id="tip"></div>
+<script>
+const module = { exports: {} };
+(function (module) {
+/*SIGNALS*/
+})(module);
+const SIG = module.exports;
+</script>
+<script>
+'use strict';
+const $ = (s, e = document) => e.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const href = u => (/^https:\/\//i.test(u || '') ? esc(u) : '#');
+const memory = {};
+const store = (k, v) => { // localStorage may be missing in this frame: fall back to memory
+  try { if (v === undefined) return JSON.parse(localStorage.getItem('catalyst.' + k) || 'null'); localStorage.setItem('catalyst.' + k, JSON.stringify(v)); }
+  catch { if (v === undefined) return memory[k] ?? null; memory[k] = v; }
+};
+const fPct = (x, d = 1) => (x == null ? '—' : (x >= 0 ? '+' : '') + (x * 100).toFixed(d) + '%');
+const fMoney = v => { if (v == null) return '—'; const a = Math.abs(v); return (v < 0 ? '−' : '') + '$' + (a >= 1e12 ? (a / 1e12).toFixed(2) + 'T' : a >= 1e9 ? (a / 1e9).toFixed(1) + 'B' : a >= 1e6 ? (a / 1e6).toFixed(0) + 'M' : a.toFixed(0)); };
+const fDate = (d, yr) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', yr ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+const ago = t => { const h = (Date.now() - t) / 36e5; return h < 1 ? 'just now' : h < 24 ? Math.round(h) + 'h ago' : Math.round(h / 24) + 'd ago'; };
+const sentBar = v => `<span class="dv"><em style="width:${Math.abs(v) / 2}%;${v >= 0 ? 'left:50%' : 'right:50%'};background:${v >= 0 ? 'var(--up)' : 'var(--down)'}"></em></span>`;
+const num = v => (v == null || v === '' || Number.isNaN(+v) ? null : +v);
+const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+const chunk = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const DAY = 864e5, iso = SIG.iso, daysBetween = SIG.daysBetween;
+const CATS = { merger: ['M&A', 'var(--ma)'], earnings: ['Earnings', 'var(--earn)'], event: ['Event radar', 'var(--event)'] };
+const CAT_COLOR = { 'M&A': 'var(--ma)', Earnings: 'var(--earn)', Event: 'var(--event)' };
+const CAPS = { micro: [0, 3e8], small: [3e8, 2e9], mid: [2e9, 1e10], large: [1e10, 2e11], mega: [2e11, Infinity] };
+const UNIVERSES = {
+  'Starter mix': ['AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMZN', 'META', 'VRTX', 'MRNA', 'SRPT', 'MDGL', 'AXSM', 'INSM', 'CRSP', 'VKTX', 'PFE', 'BMY', 'ETSY', 'PINS', 'SNAP', 'LYFT', 'CHWY', 'PTON', 'DOCU', 'M'],
+  'Mega caps': ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'JPM', 'LLY', 'V', 'UNH', 'XOM', 'WMT', 'MA', 'COST', 'NFLX', 'ORCL', 'AMD', 'CRM'],
+  'Biotech': ['VRTX', 'REGN', 'ALNY', 'BMRN', 'SRPT', 'IONS', 'MDGL', 'AXSM', 'INSM', 'CYTK', 'ARWR', 'CRSP', 'NTLA', 'BEAM', 'VKTX', 'RVMD', 'PTCT', 'ACAD', 'EXEL', 'HALO', 'NBIX', 'KRYS', 'APLS', 'MRNA'],
+  'Mid-cap M&A watch': ['ETSY', 'PINS', 'SNAP', 'DOCU', 'BOX', 'DBX', 'TWLO', 'OKTA', 'PTON', 'M', 'KSS', 'BBWI', 'CROX', 'YETI', 'HAS', 'MAT', 'U', 'PATH', 'FIVN', 'RNG', 'NTNX', 'AKAM', 'FFIV', 'LYFT', 'CHWY', 'W', 'ZM', 'TDOC'],
+  'ETFs': ['SPY', 'QQQ', 'IWM', 'DIA', 'XLF', 'XLE', 'XLK', 'XBI', 'SMH', 'ARKK', 'GLD', 'TLT'],
+};
+const SCREENS = { 'Takeover radar': { merger: 20 }, 'Earnings soon': { earnDays: 14 }, 'Unusual activity': { event: 25 }, 'Forecast: up': { dir: 'up' }, 'Forecast: down': { dir: 'down' } };
+const S = { tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -1], watch: new Set(store('watch') || []), view: 'screener', gen: 0 };
+const ok = () => S.tickers.map(t => S.res[t]).filter(r => r && !r.error);
+
+// ---------- Robinhood connector ----------
+const ERRORS = {
+  needs_reauth: 'Your Robinhood connection has expired. Reconnect Robinhood in claude.ai Settings → Connectors, then reload this page.',
+  server_not_connected: 'Robinhood is not connected to your Claude account. Add it in claude.ai Settings → Connectors, then reload this page.',
+  selection_required: 'You have more than one Robinhood connector. Choose one when Claude asks, then reload this page.',
+  not_in_manifest: 'This page has not been allowed to read from Robinhood. Reload and choose Allow when Claude asks.',
+  consent_required: 'This page has not been allowed to read from Robinhood. Press Run screen again and choose Allow when Claude asks.',
+  approval_required: 'Claude needs your approval to read from Robinhood. Press Run screen again and choose Allow.',
+  blocked_by_policy: "Your organization's policy blocks this Robinhood data.",
+  not_granted: 'Live data is not available in this view. Open the page from claude.ai while signed in.',
+  capability_disabled: 'Live data is not available in this view. Open the page from claude.ai while signed in.',
+  capability_removed: 'Live data is not available in this view. Open the page from claude.ai while signed in.',
+  server_unavailable: 'Robinhood is temporarily unavailable. Try again in a moment.',
+  rate_limited: 'Too many requests at once. Wait a few seconds and try again.',
+};
+const PAGE_LEVEL = new Set(['needs_reauth', 'server_not_connected', 'selection_required', 'not_in_manifest', 'consent_required', 'approval_required', 'blocked_by_policy', 'not_granted', 'capability_disabled', 'capability_removed']);
+const explain = e => ERRORS[e?.code] || (e?.code === 'tool_error' ? 'Robinhood could not answer that request' : 'Something went wrong reaching Robinhood');
+function report(e) { // connection-level problems get one page banner; everything else stays in its own section
+  if (PAGE_LEVEL.has(e?.code)) { $('#banner').textContent = explain(e); $('#banner').classList.add('on'); live('bad', 'Not connected'); }
+  return explain(e);
+}
+const live = (cls, text) => { $('#live').className = cls; $('#live span').textContent = text; };
+
+let mcp = null;
+const ready = (async () => { try { mcp = window.claude ? await window.claude.use('mcp') : null; } catch { mcp = null; } live(mcp ? '' : 'bad', mcp ? 'Robinhood' : 'Not connected'); return mcp; })();
+let active = 0; const waiting = [];
+async function rh(tool, input, stale = 5 * 6e4) { // one read from Robinhood, at most 4 in flight, one retry when the runtime says a retry can work
+  await ready;
+  if (!mcp) throw { code: 'capability_disabled' };
+  if (active >= 4) await new Promise(r => waiting.push(r));
+  active++;
+  try {
+    const opt = { cache: { staleTime: stale, gcTime: Math.max(stale, 36e5) } };
+    let r;
+    try { r = await mcp.callTool('Robinhood', tool, input, opt); }
+    catch (e) { if (!e?.retryable) throw e; await sleep((e.retryAfterMs || 1200) + Math.random() * 800); r = await mcp.callTool('Robinhood', tool, input, opt); }
+    const p = r?.payload;
+    if (!p || typeof p !== 'object' || !p.data) throw { code: 'tool_error', message: 'unexpected response' };
+    $('#banner').classList.remove('on'); live('ok', 'Live · Robinhood');
+    return p.data;
+  } finally { active--; waiting.shift()?.(); }
+}
+
+// One unknown symbol can sink a whole batch: if that happens, retry that batch one symbol at a time and skip the bad one.
+async function batched(symbols, size, call) {
+  await Promise.all(chunk(symbols, size).map(async g => {
+    try { await call(g); } catch (e) {
+      if (e?.code !== 'tool_error') throw e;
+      if (g.length > 1) await Promise.all(g.map(s => call([s]).catch(err => { if (err?.code !== 'tool_error') throw err; })));
+    }
+  }));
+}
+async function fetchBars(symbols) {
+  const out = {}, start = iso(Date.now() - 740 * DAY);
+  await batched(symbols, 10, async g => {
+    const d = await rh('get_equity_historicals', { symbols: g, start_time: start, interval: 'day' }, 15 * 6e4);
+    for (const r of d.results || []) out[r.symbol] = (r.bars || []).filter(b => !b.interpolated && num(b.close_price) != null).map(b => ({ d: String(b.begins_at).slice(0, 10), o: +b.open_price, h: +b.high_price, l: +b.low_price, c: +b.close_price, v: +b.volume || 0 }));
+  });
+  return out;
+}
+async function fetchBySymbol(tool, symbols, pick) {
+  const out = {};
+  await batched(symbols, 20, async g => { for (const r of (await rh(tool, { symbols: g })).results || []) { const [k, v] = pick(r); if (k) out[k] = v; } });
+  return out;
+}
+const fetchFund = s => fetchBySymbol('get_equity_fundamentals', s, r => [r.symbol, r]);
+const fetchQuotes = s => fetchBySymbol('get_equity_quotes', s, r => {
+  const q = r.quote || {}, ext = Date.parse(q.venue_last_non_reg_trade_time || 0) > Date.parse(q.venue_last_trade_time || 0);
+  const last = num(ext ? q.last_non_reg_trade_price : q.last_trade_price) ?? num(q.last_trade_price), prev = num(q.adjusted_previous_close) ?? num(q.previous_close);
+  return [q.symbol, last ? { last, chg: prev ? last / prev - 1 : null } : null];
+});
+
+// ---------- Signals built from Robinhood data ----------
+function earningsWeb(results, bars, tech, now = Date.now()) {
+  const today = iso(now), ev = [], rows = (results || []).filter(x => x.report?.date);
+  const add = (w, text, date) => ev.push({ cat: 'Earnings', w, text, date: date || null, url: null });
+  const past = rows.filter(x => num(x.eps?.actual) != null), up = rows.find(x => num(x.eps?.actual) == null && x.report.date >= today);
+  const history = [];
+  for (const x of past.slice(-8)) {
+    const i = bars.findIndex(b => b.d >= x.report.date), act = +x.eps.actual, est = num(x.eps.estimate);
+    if (i < 1) continue;
+    // "am" reports move that same session; "pm" reports move the next one
+    const pm = x.report.timing === 'pm' && bars[i].d === x.report.date;
+    const move = pm ? (bars[i + 1] ? bars[i + 1].c / bars[i].c - 1 : null) : bars[i].c / bars[i - 1].c - 1;
+    if (move != null) history.push({ date: x.report.date, move, surprise: est ? (act - est) / Math.abs(est) : null });
+  }
+  const next = up?.report.date || null, daysTo = next ? daysBetween(today, next) : null;
+  const expectedMove = history.length ? mean(history.map(h => Math.abs(h.move))) : tech?.rv20 ? tech.rv20 * 2.5 : null;
+  const ups = history.filter(h => h.move > 0).length, scored = history.filter(h => h.surprise != null), beats = scored.filter(h => h.surprise > 0).length;
+  const prox = daysTo == null ? 0.1 : daysTo <= 7 ? 1 : daysTo <= 14 ? 0.85 : daysTo <= 30 ? 0.6 : daysTo <= 45 ? 0.4 : 0.2;
+  const score = Math.round(100 * (0.6 * prox + 0.4 * Math.min(1, (expectedMove || 0) / 0.12)));
+  const n = past.length, yoy = n >= 5 && Math.abs(+past[n - 5].eps.actual) > 0.01 ? (+past[n - 1].eps.actual - +past[n - 5].eps.actual) / Math.abs(+past[n - 5].eps.actual) : null;
+  let lean = 0;
+  if (yoy != null) lean += yoy > 0.1 ? 20 : yoy < -0.1 ? -20 : 0;
+  if (scored.length >= 4) lean += beats / scored.length >= 0.75 ? 15 : beats / scored.length <= 0.25 ? -15 : 0;
+  if (history.length >= 4) lean += ups / history.length >= 0.7 ? 15 : ups / history.length <= 0.3 ? -15 : 0;
+  if (tech?.sma50) lean += tech.last > tech.sma50 ? 10 : -10;
+  if (next) add(Math.round(score * 0.5), `Next earnings ${next}${daysTo ? ` (${daysTo} day${daysTo === 1 ? '' : 's'})` : ' (today)'}, ${up.report.verified ? 'confirmed by the company' : 'date not yet confirmed'}`);
+  if (history.length) add(8, `Typical earnings reaction ±${(expectedMove * 100).toFixed(1)}%; the stock rose after ${ups} of the last ${history.length} reports`);
+  if (scored.length) add(7, `Beat analyst estimates in ${beats} of the last ${scored.length} quarters`);
+  if (yoy != null && Math.abs(yoy) > 0.1) add(8, `EPS ${fPct(yoy, 0)} year over year last quarter`);
+  const lastRx = history[history.length - 1];
+  if (lastRx && daysBetween(lastRx.date, today) <= 21) add(10, `Reported earnings${lastRx.surprise != null ? ` (${lastRx.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(lastRx.surprise * 100).toFixed(0)}%)` : ''} — stock moved ${fPct(lastRx.move)}`, lastRx.date);
+  return {
+    score, level: score >= 70 ? 'High' : score >= 40 ? 'Elevated' : score >= 20 ? 'Watch' : 'Low', lean, leanLabel: lean >= 25 ? 'Bullish lean' : lean <= -25 ? 'Bearish lean' : 'Neutral lean',
+    nextDate: next, dateConfirmed: !!up?.report.verified, daysTo, expectedMove, history, epsQ: past.slice(-7).map(x => ({ end: x.report.date, val: +x.eps.actual })), epsForecast: num(up?.eps?.estimate), evidence: ev,
+  };
+}
+
+// No news feed in the hosted edition, so the forecast runs on technicals alone.
+const forecastWeb = bars => { const fc = SIG.forecast(bars, null); if (fc) fc.factors = fc.factors.filter(f => f.name !== 'News sentiment'); return fc; };
+const companyName = (f, t) => (String(f?.description || '').match(/^(.{2,60}?)\s+(is|engages|operates|provides|designs|develops|manufactures|offers|owns|focuses|through|together)\b/) || [])[1]?.replace(/,$/, '') || t;
+
+function assemble(ticker, bars, fund, quote, earningsData, filingData) {
+  const tech = SIG.technicals(bars), last = quote?.last ?? tech?.last;
+  const filings = (filingData?.filings || []).map(f => ({ form: String(f.form_type || ''), date: String(f.date_filed || ''), items: '', file: '', desc: String(f.description || ''), url: f.cik && f.accession_number ? `https://www.sec.gov/Archives/edgar/data/${encodeURIComponent(f.cik)}/${encodeURIComponent(String(f.accession_number).replace(/-/g, ''))}/` : null }));
+  const fundLite = { mcap: num(fund?.market_cap), evSales: null };
+  const earn = earningsWeb(earningsData?.results, bars, tech);
+  const ma = SIG.merger({ filings, tech, fund: fundLite, sent: null, fts: null, jetEvents: [] });
+  const event = SIG.eventRadar({ filings, tech, earn, fdaRes: null, sent: null });
+  const fc = forecastWeb(bars);
+  const parts = [['M&A', ma.score], ['Earnings', earn.score], ['Event radar', event.score]].sort((a, b) => b[1] - a[1]);
+  const evidence = [...ma.evidence, ...earn.evidence, ...event.evidence];
+  return {
+    ticker, name: companyName(fund, ticker), industry: [fund?.sector, fund?.industry].filter(Boolean).join(' · '), city: [fund?.headquarters_city, fund?.headquarters_state].filter(Boolean).join(', '),
+    about: String(fund?.description || ''), asOf: Date.now(), full: !!(earningsData || filingData),
+    price: tech ? { ...tech, last, chg1d: quote?.chg ?? tech.chg1d } : null, forecast: fc,
+    fund: { mcap: num(fund?.market_cap), pe: num(fund?.pe_ratio), pb: num(fund?.pb_ratio), yield: num(fund?.dividend_yield), hi52: num(fund?.high_52_weeks), lo52: num(fund?.low_52_weeks), float: num(fund?.float) },
+    chart: bars.slice(-252).map(b => [b.d, +b.c.toFixed(2)]),
+    markers: [...earn.history.map(h => ({ d: h.date, type: 'earn', label: `Earnings ${fPct(h.move)}` })), ...ma.marks],
+    scores: { overall: Math.round(0.65 * parts[0][1] + 0.35 * parts[1][1]), merger: ma.score, earnings: earn.score, event: event.score },
+    driver: parts[0][0], thesis: evidence.slice().sort((a, b) => b.w - a.w).slice(0, 4).map(e => ({ cat: e.cat, text: e.text })),
+    merger: ma, earnings: earn, event,
+    filings: filings.filter(f => !/^(3|4|5|144|13F|424B|S-8)/.test(f.form)).slice(0, 20),
+  };
+}
+
+const yearAgo = () => iso(Date.now() - 365 * DAY);
+const extras = t => Promise.all([rh('get_earnings_results', { symbol: t }, 30 * 6e4).catch(() => null), rh('get_sec_filing_index', { symbol: t, since: yearAgo() }, 30 * 6e4).catch(() => null)]);
+
+async function run(list) {
+  const gen = ++S.gen;
+  S.tickers = [...new Set(list)].slice(0, 60);
+  renderTable();
+  const need = S.tickers.filter(t => !S.res[t] || S.res[t].error || !S.res[t].full); // also finish anything an interrupted run left half-loaded
+  if (!need.length) return;
+  try {
+    const [bars, fund, quotes] = await Promise.all([fetchBars(need), fetchFund(need), fetchQuotes(need)]);
+    for (const t of need) S.res[t] = bars[t]?.length > 30 ? assemble(t, bars[t], fund[t], quotes[t]) : { error: 'No data for this symbol' };
+    if (gen === S.gen) renderTable();
+    const queue = need.filter(t => !S.res[t].error);
+    await Promise.all([1, 2, 3].map(async () => {
+      while (queue.length && gen === S.gen) {
+        const t = queue.shift(), [er, fl] = await extras(t);
+        S.res[t] = assemble(t, bars[t], fund[t], quotes[t], er || {}, fl || {});
+        if (gen === S.gen) { renderTable(); if (S.view === 'calendar') renderCalendar(); }
+      }
+    }));
+  } catch (e) { const msg = report(e); for (const t of need) if (!S.res[t]) S.res[t] = { error: msg }; S.runError = msg; renderTable(); }
+}
+
+async function loadOne(t) {
+  try {
+    const [bars, fund, quotes, [er, fl]] = await Promise.all([fetchBars([t]), fetchFund([t]), fetchQuotes([t]), extras(t)]);
+    S.res[t] = bars[t]?.length > 30 ? assemble(t, bars[t], fund[t], quotes[t], er || {}, fl || {}) : { error: `No data found for ${t}` };
+  } catch (e) { S.res[t] = { error: report(e) }; }
+  return S.res[t];
+}
+
+// ---------- Screener ----------
+const COLS = [['ticker', 'Company', r => r.ticker], ['price', 'Price', r => r.price?.last, 1], ['chg', '1D', r => r.price?.chg1d, 1], ['overall', 'Catalyst', r => r.scores.overall], ['merger', 'M&A', r => r.scores.merger], ['earnings', 'Earnings', r => r.scores.earnings], ['event', 'Event', r => r.scores.event], ['fc', 'Forecast', r => r.forecast?.pUp], ['next', 'Next earnings', r => r.earnings.daysTo, 1], ['mcap', 'Mkt cap', r => r.fund?.mcap, 1]];
+const SLIDERS = [['overall', 'Catalyst score', 'var(--accent)'], ['merger', 'M&A signal', 'var(--ma)'], ['earnings', 'Earnings setup', 'var(--earn)'], ['event', 'Event radar', 'var(--event)']];
+
+function passes(r) {
+  const c = S.crit, s = r.scores;
+  for (const [k] of SLIDERS) if (c[k] && s[k] < c[k]) return false;
+  if (c.dir && !(c.dir === 'up' ? r.forecast?.verdict === 'Up' : r.forecast?.verdict === 'Down')) return false;
+  if (c.earnDays && !(r.earnings.daysTo != null && r.earnings.daysTo <= c.earnDays)) return false;
+  if (c.cap) { const m = r.fund?.mcap, [lo, hi] = CAPS[c.cap]; if (m == null || m < lo || m >= hi) return false; }
+  if (c.vol && !((r.price?.volRatio || 0) >= c.vol)) return false;
+  if (c.price && !((r.price?.last || 0) >= c.price)) return false;
+  if (c.starred && !S.watch.has(r.ticker)) return false;
+  return true;
+}
+
+function renderCrit() {
+  const c = S.crit;
+  const sel = (k, label, opts) => `<label class="f">${label}<select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(c[k] ?? '') === String(v) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+  $('#crit').innerHTML = SLIDERS.map(([k, n, col]) => `<label class="sl"><span><i style="background:${col}"></i>${n}</span><output>${c[k] ? '≥ ' + c[k] : 'Any'}</output><input type="range" min="0" max="100" step="5" value="${c[k] || 0}" data-k="${k}"></label>`).join('')
+    + sel('dir', 'Price forecast', [['', 'Any'], ['up', 'Leaning up'], ['down', 'Leaning down']])
+    + sel('earnDays', 'Earnings within', [['', 'Any time'], [7, '7 days'], [14, '14 days'], [30, '30 days'], [60, '60 days']])
+    + sel('cap', 'Market cap', [['', 'Any size'], ['micro', 'Micro · under $300M'], ['small', 'Small · $300M–2B'], ['mid', 'Mid · $2B–10B'], ['large', 'Large · $10B–200B'], ['mega', 'Mega · over $200B']])
+    + sel('vol', 'Volume vs normal', [['', 'Any'], [1.2, 'At least 1.2x'], [1.5, 'At least 1.5x'], [2, 'At least 2x']])
+    + `<label class="f">Minimum price<input type="number" min="0" step="1" placeholder="$ any" value="${c.price || ''}" data-k="price"></label>`
+    + `<label class="tog">Watchlist only<input type="checkbox" data-k="starred"${c.starred ? ' checked' : ''}><b></b></label>`;
+  const cur = JSON.stringify(c);
+  $('#screens').innerHTML = Object.keys(SCREENS).map(n => `<button class="chip${JSON.stringify(SCREENS[n]) === cur ? ' on' : ''}" data-screen="${esc(n)}">${esc(n)}</button>`).join('');
+}
+
+$('#crit').addEventListener('input', e => {
+  const el = e.target, k = el.dataset.k, c = S.crit;
+  if (!k) return;
+  if (el.type === 'checkbox') el.checked ? (c[k] = true) : delete c[k];
+  else if (el.value === '' || (el.type === 'range' && +el.value === 0)) delete c[k];
+  else c[k] = k === 'cap' || k === 'dir' ? el.value : +el.value;
+  if (el.type === 'range') el.previousElementSibling.textContent = c[k] != null ? '≥ ' + c[k] : 'Any';
+  store('crit', c); renderTable();
+  const cur = JSON.stringify(c);
+  document.querySelectorAll('[data-screen]').forEach(b => b.classList.toggle('on', JSON.stringify(SCREENS[b.dataset.screen]) === cur));
+});
+
+const scoreCell = (v, col, big) => (v == null ? '<td class="sc sub">—</td>' : `<td class="sc${big ? ' big' : ''}"><b>${v}</b><i style="--v:${v}%;--c:${col}"></i></td>`);
+const fcCell = fc => (!fc ? '<td class="sub">—</td>' : `<td class="fcell"><i class="${fc.verdict === 'Up' ? 'u' : fc.verdict === 'Down' ? 'd' : ''}">${fc.verdict === 'Up' ? '▲' : fc.verdict === 'Down' ? '▼' : '◆'}</i> <b>${Math.round(fc.pUp * 100)}%</b> <span class="sub">up</span></td>`);
+
+function renderTable() {
+  const [key, dir] = S.sort, get = COLS.find(c => c[0] === key)[2];
+  const rows = ok().filter(passes).sort((a, b) => { const x = get(a), y = get(b); return x == null ? 1 : y == null ? -1 : (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  const pending = S.tickers.filter(t => !S.res[t]).length, failed = S.tickers.filter(t => S.res[t]?.error).length, partial = ok().filter(r => !r.full).length;
+  $('#thead').innerHTML = '<tr><th></th>' + COLS.map(([k, n, , right]) => `<th data-sort="${k}" class="${right ? 'num ' : ''}${k === key ? 'on' : ''}">${n}${k === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('') + '<th>Top signal</th></tr>';
+  $('#tbody').innerHTML = rows.map(r => {
+    const p = r.price, s = r.scores, e = r.earnings;
+    return `<tr data-open="${esc(r.ticker)}"><td><button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></td>
+      <td class="co"><b>${esc(r.ticker)}</b><span>${esc(r.name)}</span></td>
+      <td class="num">${p ? '$' + p.last.toFixed(2) : '—'}</td><td class="num ${p?.chg1d >= 0 ? 'up' : 'dn'}">${p ? fPct(p.chg1d) : '—'}</td>
+      ${scoreCell(s.overall, 'var(--accent)', 1)}${scoreCell(s.merger, 'var(--ma)')}${scoreCell(s.earnings, 'var(--earn)')}${scoreCell(s.event, 'var(--event)')}${fcCell(r.forecast)}
+      <td class="num">${e.nextDate ? `${fDate(e.nextDate)} <span class="sub">· ${e.daysTo}d</span>` : '—'}</td><td class="num">${fMoney(r.fund?.mcap)}</td>
+      <td class="why" title="${esc(r.thesis[0]?.text || '')}">${esc(r.thesis[0]?.text || '—')}</td></tr>`;
+  }).join('') + Array(Math.min(pending, 6)).fill('<tr class="sk"><td colspan="12"><span></span></td></tr>').join('')
+    || `<tr><td colspan="12" class="empty">${S.runError ? esc(S.runError) : S.tickers.length ? 'Nothing matches these criteria. Loosen a filter or hit Reset.' : 'Pick a universe and run a screen.'}</td></tr>`;
+  $('#count').innerHTML = `${rows.length} match${rows.length === 1 ? '' : 'es'} <span class="sub">of ${S.tickers.length} screened${pending ? ` · loading ${pending}` : partial ? ` · adding earnings and filings for ${partial}` : ''}${failed ? ` · ${failed} unavailable` : ''}</span>`;
+  const total = S.tickers.length * 2 || 1, done = (S.tickers.length - pending) + (ok().length - partial) + failed;
+  $('#bar i').style.width = Math.min(100, (100 * done) / total) + '%';
+  $('#bar').style.opacity = pending || partial ? 1 : 0;
+}
+
+/*SHARED*/
+
+// ---------- Detail ----------
+const evi = list => (list.length ? `<ul class="evi">${list.map(e => `<li><span class="w">+${e.w}</span><span>${e.url ? `<a href="${href(e.url)}" target="_blank" rel="noopener">${esc(e.text)} ↗</a>` : esc(e.text)}</span><span class="d">${e.date ? fDate(e.date) : ''}</span></li>`).join('')}</ul>` : '<div class="empty">No signals firing.</div>');
+
+function renderDetail(r) {
+  const p = r.price, f = r.fund, e = r.earnings, s = r.scores;
+  const tile = k => { const [n, col] = CATS[k]; return `<div class="tile"><span class="lab"><i style="background:${col}"></i>${n}</span><b>${s[k]}</b><em>${esc(k === 'earnings' ? e.leanLabel : r[k].level)}</em><div class="meter"><i style="width:${s[k]}%;background:${col}"></i></div></div>`; };
+  const stat = (n, v) => `<div><span>${n}</span><b>${v}</b></div>`, fc = r.forecast;
+  $('#drawer').innerHTML = `
+  <div class="dh"><div><div class="tk">${esc(r.ticker)}<button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></div><div class="nm">${esc(r.name)}</div><div class="sub">${esc([r.industry, r.city].filter(Boolean).join(' · '))}</div></div>
+    <div class="px">${p ? `<b>$${p.last.toFixed(2)}</b><span class="${p.chg1d >= 0 ? 'up' : 'dn'}">${fPct(p.chg1d, 2)} today</span>` : ''}</div><button class="x" data-close aria-label="Close">✕</button></div>
+  <div class="card hero">${ring(s.overall)}<div><div class="eyebrow">Catalyst score · led by ${esc(r.driver)}</div><ul class="thesis">${r.thesis.map(t => `<li><i style="background:${CAT_COLOR[t.cat]}"></i><span>${esc(t.text)}</span></li>`).join('') || '<li>No notable signals right now.</li>'}</ul></div></div>
+  <div class="tiles" style="grid-template-columns:repeat(4,1fr)">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">Price forecast</span><b>${fc ? Math.round(fc.pUp * 100) + '%' : '—'}</b><em>${fc ? (fc.verdict === 'No clear edge' ? 'No clear edge' : 'Leaning ' + fc.verdict.toLowerCase()) + ' · chance up' : 'Too little history'}</em>${fc ? sentBar(Math.round((fc.pUp - 0.5) * 200)) : ''}</div></div>
+  <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:rgba(255,255,255,.25);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
+  ${forecastCard(fc)}
+  <div class="card"><h3>Key numbers</h3><div class="stats">${stat('Market cap', fMoney(f.mcap))}${stat('P/E ratio', f.pe != null ? f.pe.toFixed(1) : '—')}${stat('Price / book', f.pb != null ? f.pb.toFixed(1) : '—')}${stat('Dividend yield', f.yield != null ? f.yield.toFixed(2) + '%' : '—')}${stat('52-week high', f.hi52 != null ? '$' + f.hi52.toFixed(2) : '—')}${stat('52-week low', f.lo52 != null ? '$' + f.lo52.toFixed(2) : '—')}${stat('52-week range', p?.pos52 != null ? Math.round(p.pos52 * 100) + '% of the way up' : '—')}${stat('Volume vs normal', p?.volRatio ? p.volRatio.toFixed(2) + 'x' : '—')}</div></div>
+  <div class="card"><h3><span><i class="dot" style="background:var(--earn)"></i>Earnings</span><span class="tag">${esc(e.leanLabel)}</span></h3>
+    <div class="stats" style="margin-bottom:16px">${stat(e.dateConfirmed ? 'Next report (confirmed)' : 'Next report (tentative)', e.nextDate ? fDate(e.nextDate, 1) : '—')}${stat('Typical move', e.expectedMove ? '±' + (e.expectedMove * 100).toFixed(1) + '%' : '—')}${stat('Analyst EPS estimate', e.epsForecast != null ? '$' + e.epsForecast.toFixed(2) : '—')}${stat('In', e.daysTo != null ? e.daysTo + ' days' : '—')}</div>
+    <div class="grid2"><div><div class="sub" style="margin-bottom:6px">Stock reaction to past reports</div>${reactionBars(e.history)}</div><div><div class="sub" style="margin-bottom:6px">Reported EPS, with the analyst estimate for next quarter</div>${epsBars(e)}</div></div>${evi(e.evidence)}</div>
+  <div class="card"><h3><span><i class="dot" style="background:var(--ma)"></i>M&A signals</span><span class="tag">${esc(r.merger.level)}</span></h3>${evi(r.merger.evidence)}</div>
+  <div class="card"><h3><span><i class="dot" style="background:var(--event)"></i>Event radar</span><span class="tag">${esc(r.event.level)}</span></h3>${evi(r.event.evidence)}</div>
+  ${r.about ? `<div class="card"><h3>About</h3><div class="about">${esc(r.about)}</div></div>` : ''}
+  <div class="card"><h3>Recent SEC filings</h3>${r.filings.map(x => `<div class="fil"><span>${fDate(x.date, 1)}</span><a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.form)} ↗</a><span>${esc(x.desc)}</span></div>`).join('') || '<div class="empty">No filings found.</div>'}</div>
+  <div class="note">Scores are rule-based signals built from market data, not investment advice. Data from your Robinhood connection · updated ${ago(r.asOf)}.</div>`;
+  bindChart(r);
+}
+
+async function openDetail(ticker) {
+  $('#drawer').classList.add('on'); $('#scrim').classList.add('on');
+  let r = S.res[ticker];
+  const head = msg => `<div class="dh"><div class="tk">${esc(ticker)}</div><button class="x" data-close style="margin-left:auto">✕</button></div><div class="empty">${msg}</div>`;
+  if (!r || r.error || !r.full) { if (!r || r.error) $('#drawer').innerHTML = head(`Analyzing ${esc(ticker)}: prices, earnings, filings…`); else renderDetail(r); r = await loadOne(ticker); }
+  if (!$('#drawer').classList.contains('on')) return;
+  if (r.error) { $('#drawer').innerHTML = head(esc(r.error) + '.'); return; }
+  $('#drawer').scrollTop = 0; renderDetail(r);
+}
+const closeDetail = () => { $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); $('#tip').classList.remove('on'); };
+
+// ---------- Options ----------
+async function fetchChain(symbol, want, progress) {
+  const chains = ((await rh('get_option_chains', { underlying_symbol: symbol }, 36e5)).chains || []).filter(c => c.symbol === symbol && (c.expiration_dates || []).length);
+  if (!chains.length) throw { code: 'no_options' };
+  const today = iso(Date.now()), week = iso(Date.now() + 6 * DAY);
+  const expirations = [...new Set(chains.flatMap(c => c.expiration_dates))].filter(d => d >= today).sort();
+  const exp = expirations.includes(want) ? want : expirations.find(d => d >= week) || expirations[0];
+  const instruments = [];
+  for (const c of chains.filter(c => c.expiration_dates.includes(exp))) {
+    for (let cursor, page = 0; page < 25; page++) {
+      const d = await rh('get_option_instruments', { chain_id: c.id, expiration_dates: exp, ...(cursor ? { cursor } : {}) }, 36e5);
+      instruments.push(...(d.instruments || []));
+      progress(`Found ${instruments.length} contracts…`);
+      if (!(cursor = d.next)) break;
+    }
+  }
+  const quotes = {};
+  let done = 0;
+  await Promise.all(chunk(instruments.map(i => i.id), 40).map(async ids => {
+    for (const r of (await rh('get_option_quotes', { instrument_ids: ids }, 2 * 6e4)).results || []) if (r.quote) quotes[r.quote.instrument_id] = r.quote;
+    progress(`Pricing ${Math.min(instruments.length, (done += ids.length))} of ${instruments.length} contracts…`);
+  }));
+  const contracts = instruments.map(i => { const q = quotes[i.id] || {}; return { exp, type: i.type === 'call' ? 'C' : 'P', strike: +i.strike_price, bid: num(q.bid_price), ask: num(q.ask_price), last: num(q.mark_price), iv: num(q.implied_volatility), delta: num(q.delta), vol: +q.volume || 0, oi: +q.open_interest || 0 }; });
+  return { expirations, exp, contracts };
+}
+
+function renderOptions() {
+  const o = S.opt || {}, d = o.data;
+  $('#options').innerHTML = `<form id="optform"><input name="symbol" placeholder="Symbol, e.g. QQQ" value="${esc(o.symbol || '')}" autocomplete="off" spellcheck="false" required><button type="submit">Predict</button>${['QQQ', 'SPY', 'NVDA', 'AAPL', 'TSLA', 'AMD'].map(s => `<button type="button" class="chip" data-optsym="${s}">${s}</button>`).join('')}</form>`
+    + (o.error ? `<div class="empty">${esc(o.error)}.</div>`
+      : !d ? (o.loading ? `<div class="empty">Running the forecast for ${esc(o.symbol)}…</div>` : '<div class="empty">Pick any stock or ETF. You get an up / down forecast for the price, and every option strike marked green or red.</div>')
+      : `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div><div style="font-size:24px;font-weight:700">${esc(d.symbol)}</div><div class="sub">${esc(d.name)}</div></div><div style="text-align:right"><b style="font-size:22px">$${d.price.toFixed(2)}</b><div class="${d.chg1d >= 0 ? 'up' : 'dn'}">${fPct(d.chg1d, 2)} today</div></div></div>`
+        + (forecastCard(d.forecast, 'Price forecast') || '<div class="card"><div class="empty">This symbol needs about a year of price history before a forecast can be made.</div></div>')
+        + (d.chain ? chainCard(d) : `<div class="card"><h3>Option chain</h3><div class="empty">${esc(o.progress || 'Loading the option chain…')}</div></div>`));
+  const w = $('.chainwrap'), s = $('.chain .spot');
+  if (w && s) w.scrollTop = s.offsetTop - w.clientHeight / 2;
+}
+
+async function loadOptions(symbol, exp) {
+  symbol = symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9.\-]{1,8}$/.test(symbol)) return;
+  const token = (S.optToken = {}), keep = exp && S.opt?.data?.symbol === symbol ? S.opt.data : null;
+  S.opt = { symbol, loading: true, data: keep ? { ...keep, chain: null } : null, progress: 'Loading the option chain…' };
+  renderOptions();
+  try {
+    let base = keep;
+    if (!base) {
+      const [bars, quotes, fund] = await Promise.all([fetchBars([symbol]), fetchQuotes([symbol]), fetchFund([symbol]).catch(() => ({}))]);
+      if (!(bars[symbol]?.length > 1)) throw { code: 'no_prices' };
+      const b = bars[symbol], last = quotes[symbol]?.last ?? b[b.length - 1].c;
+      const fc = forecastWeb(b);
+      if (fc) { fc.low *= last / fc.last; fc.high *= last / fc.last; fc.last = last; }
+      base = { symbol, name: companyName(fund[symbol], symbol), price: last, chg1d: quotes[symbol]?.chg ?? last / b[b.length - 2].c - 1, forecast: fc };
+    }
+    if (token !== S.optToken) return;
+    S.opt = { symbol, data: { ...base, chain: null }, progress: 'Loading the option chain…' };
+    renderOptions();
+    if (!base.forecast) return;
+    const ch = await fetchChain(symbol, exp, msg => { if (token === S.optToken && S.opt.data && !S.opt.data.chain) { S.opt.progress = msg; const el = $('#options .card:last-child .empty'); if (el) el.textContent = msg; } });
+    if (token !== S.optToken) return;
+    S.opt = { symbol, data: { ...base, needsKey: false, chain: { provider: 'robinhood', expirations: ch.expirations, exp: ch.exp, ...SIG.markOptions(ch.contracts, base.forecast, ch.exp) } } };
+  } catch (e) {
+    if (token !== S.optToken) return;
+    const msg = e?.code === 'no_options' ? `No listed options were found for ${symbol}` : e?.code === 'no_prices' ? `No price history found for ${symbol}` : report(e);
+    S.opt = S.opt.data ? { symbol, data: { ...S.opt.data, needsKey: false, chain: { error: msg } } } : { symbol, error: msg };
+  }
+  if (S.view === 'options') renderOptions();
+}
+
+// ---------- Calendar ----------
+function renderCalendar() {
+  const ev = ok().filter(r => r.earnings.nextDate).map(r => ({ d: r.earnings.nextDate, days: r.earnings.daysTo, t: r.ticker, text: `Earnings${r.earnings.dateConfirmed ? '' : ' (tentative date)'}${r.earnings.expectedMove ? ` · typical move ±${(r.earnings.expectedMove * 100).toFixed(1)}%` : ''}${r.earnings.epsForecast != null ? ` · EPS estimate $${r.earnings.epsForecast.toFixed(2)}` : ''} · ${r.earnings.leanLabel.toLowerCase()}` })).sort((a, b) => (a.d < b.d ? -1 : 1));
+  let lo = -1;
+  $('#calendar').innerHTML = ev.length ? [['This week', 7], ['Next 30 days', 30], ['Next 90 days', 90], ['Later', 1e9]].map(([name, hi]) => {
+    const g = ev.filter(x => x.days > lo && x.days <= hi); lo = hi;
+    return g.length ? `<h2>${name}</h2><div class="card">${g.map(x => `<div class="row"><span class="d">${fDate(x.d)} · ${x.days}d</span><b class="t" data-open="${esc(x.t)}">${esc(x.t)}</b><span><span class="tag"><i class="dot" style="background:var(--earn)"></i>Earnings</span></span><span class="x">${esc(x.text)}</span></div>`).join('')}</div>` : '';
+  }).join('') : '<div class="empty">Run a screen first — upcoming earnings for those companies are laid out here.</div>';
+}
+
+// ---------- Wiring ----------
+function showTip(html, e) { const t = $('#tip'); t.innerHTML = html; t.classList.add('on'); const w = t.offsetWidth, h = t.offsetHeight; t.style.left = Math.min(innerWidth - w - 8, e.clientX + 14) + 'px'; t.style.top = Math.max(8, e.clientY - h - 12) + 'px'; }
+document.addEventListener('mousemove', e => { const el = e.target.closest?.('[data-tip]'); if (el) showTip(esc(el.dataset.tip), e); else if (!e.target.closest?.('#pc')) $('#tip').classList.remove('on'); });
+
+function show(view) {
+  S.view = view;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
+  if (view === 'calendar') renderCalendar();
+  if (view === 'options') renderOptions();
+}
+
+document.addEventListener('click', e => {
+  const hit = s => e.target.closest(s);
+  let el;
+  if ((el = hit('[data-star]'))) { const k = el.dataset.star; S.watch.has(k) ? S.watch.delete(k) : S.watch.add(k); store('watch', [...S.watch]); document.querySelectorAll(`[data-star="${CSS.escape(k)}"]`).forEach(b => b.classList.toggle('on', S.watch.has(k))); if (S.crit.starred) renderTable(); return; }
+  if (hit('[data-close]')) return closeDetail();
+  if ((el = hit('#tabs [data-v]'))) return show(el.dataset.v);
+  if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; S.sort = [k, S.sort[0] === k ? -S.sort[1] : k === 'ticker' || k === 'next' ? 1 : -1]; return renderTable(); }
+  if ((el = hit('[data-screen]'))) { S.crit = { ...SCREENS[el.dataset.screen] }; store('crit', S.crit); renderCrit(); return renderTable(); }
+  if ((el = hit('[data-optsym]'))) return loadOptions(el.dataset.optsym);
+  if ((el = hit('[data-exp]'))) return loadOptions(S.opt.symbol, el.dataset.exp);
+  if ((el = hit('[data-open]')) && !hit('a')) return openDetail(el.dataset.open);
+});
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  if (e.target.id === 'search') { const t = $('#q').value.trim().toUpperCase(); if (/^[A-Z0-9.\-]{1,8}$/.test(t)) { openDetail(t); $('#q').value = ''; $('#q').blur(); } }
+  if (e.target.id === 'optform') loadOptions(e.target.symbol.value);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+$('#reset').onclick = () => { S.crit = {}; store('crit', S.crit); renderCrit(); renderTable(); };
+$('#run').onclick = () => {
+  const custom = $('#custom').value.toUpperCase().split(/[^A-Z0-9.\-]+/).filter(t => /^[A-Z0-9.\-]{1,8}$/.test(t));
+  store('uni', $('#uni').value); store('custom', $('#custom').value);
+  S.runError = null;
+  run(custom.length ? custom : UNIVERSES[$('#uni').value] || []);
+};
+
+$('#uni').innerHTML = Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('');
+$('#uni').value = UNIVERSES[store('uni')] ? store('uni') : 'Starter mix';
+$('#custom').value = store('custom') || '';
+renderCrit(); renderTable();
+ready.then(m => { if (m) $('#run').click(); else { $('#banner').textContent = ERRORS.capability_disabled; $('#banner').classList.add('on'); } });
+</script>
+</body>
+</html>
