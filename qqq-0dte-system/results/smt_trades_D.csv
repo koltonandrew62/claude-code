@@ -1,0 +1,6 @@
+date,entry,exit,setup,dir,smt,strike,contracts,buy,sell,pnl,why,R,src,sample,equity
+2026-10-15,10:12,10:12,ORB_RETEST,CALL,,721.0,1,3.41,3.1,-32.3,stop,-1.0,model,IS,1584.7
+2026-10-20,10:01,10:08,ORB_RETEST,CALL,,716.0,1,2.98,3.86,86.7,target,2.0,model,IS,1671.4
+2026-11-02,10:14,10:16,ORB_RETEST,CALL,,696.0,1,2.24,2.46,20.7,target,2.0,model,IS,1692.1
+2026-11-10,11:57,11:57,ORB_RETEST,PUT,,670.0,1,2.49,2.23,-27.3,stop,-1.0,model,IS,1664.8
+2026-11-19,10:15,10:25,ORB_RETEST,PUT,,669.0,1,4.25,6.98,271.7,target,2.0,model,OOS,1936.5
