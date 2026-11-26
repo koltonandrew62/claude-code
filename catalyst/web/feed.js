@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { analyze } = require('../lib/analyze');
+const { analyze, marketNews } = require('../lib/analyze');
 const src = require('../lib/sources');
 const S = require('../lib/signals');
 const jets = require('../lib/jets');
@@ -77,6 +77,8 @@ async function logos(tickers) {
   }));
   fs.mkdirSync(OUT, { recursive: true });
   if (!jetsOnly) fs.writeFileSync(path.join(OUT, 'feed.json'), JSON.stringify({ at: Date.now(), tickers: out }));
+
+  if (!jetsOnly) fs.writeFileSync(path.join(OUT, 'news.json'), JSON.stringify(await marketNews().catch(() => ({ at: Date.now(), items: [] }))));
 
   // One sweep of the aircraft feed, measured against the headquarters just placed.
   jets.state();

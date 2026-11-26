@@ -137,7 +137,7 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:var
 <header>
   <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="var(--line2)"/><circle cx="12" cy="12" r="6" stroke="var(--ink3)"/><path d="M12 12 19.5 6" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="var(--accent)"/></svg>CATALYST</div>
   <form id="search"><input id="q" placeholder="Analyze any ticker…   press /" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
-  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
+  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="news">News</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
   <div id="sources"></div>
   <button class="ghost" data-settings>API keys</button>
 </header>
@@ -161,6 +161,7 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:var
   </section>
   <section id="v-options" class="view"><div class="feed wide" id="options"></div></section>
   <section id="v-calendar" class="view"><div class="feed" id="calendar"></div></section>
+  <section id="v-news" class="view"><div class="feed" id="news"></div></section>
   <section id="v-signals" class="view"><div class="feed" id="signals"></div></section>
   <section id="v-jets" class="view"><div id="map"></div><aside id="jetside"></aside></section>
 </main>
@@ -281,7 +282,14 @@ async function run(list) {
   sources();
 }
 
-async function refreshScreen() { // reload every screened ticker in place, without blanking the table
+async function loadNews(force) { // live: the server re-reads the news feeds every 5 minutes
+  if (S.news && !force && Date.now() - S.news.at < 5 * 6e4) return;
+  try { S.news = await api('/api/news'); S.newsNote = `Live · updated ${new Date(S.news.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${S.news.items.length} stories from the last two days`; }
+  catch (e) { S.newsNote = 'Could not load the news feed: ' + e.message; if (!S.news) S.news = { at: 0, items: [] }; }
+  if (S.view === 'news') renderNews();
+}
+async function refreshScreen() {
+  if (S.view === 'news') loadNews(true); // reload every screened ticker in place, without blanking the table
   if (S.refreshing || !S.tickers.length || S.tickers.some(t => !S.res[t])) return;
   S.refreshing = true;
   try { for (const t of S.tickers.slice()) { const old = S.res[t], r = await load(t); if (r.error && old && !old.error) S.res[t] = old; } } finally { S.refreshing = false; }
@@ -482,6 +490,28 @@ function renderSignals() {
 }
 
 // ---------- Direction forecast & options ----------
+// News feed: every story shows its tone, its topics, the stocks it names and the sectors it is likely to move.
+function newsFeed(d, filter, mine, note) {
+  if (!d) return '<div class="empty">Loading the latest stories…</div>';
+  const chip = (t, cls = '') => `<button class="chip ${cls}" data-open="${esc(t)}" style="padding:1px 8px;font-size:11.5px">${esc(t)}</button>`;
+  const items = d.items.filter(n => (filter === 'All' || n.tags.includes(filter)) && (!mine || n.mentions.some(t => mine.has(t))));
+  const tally = {};
+  for (const n of d.items) for (const t of n.mentions) { const x = (tally[t] ||= { n: 0, s: 0 }); x.n++; x.s += n.s; }
+  const hot = Object.entries(tally).sort((a, b) => b[1].n - a[1].n).slice(0, 10);
+  return `<div class="chips" style="margin:4px 4px 12px">${['All', 'M&A', 'FDA', 'Earnings', 'Analyst', 'Legal'].map(c => `<button class="chip${filter === c ? ' on' : ''}" data-newsf="${c}">${c}</button>`).join('')}<button class="chip${mine ? ' on' : ''}" data-newsmine>Only stocks in my screen</button><button class="chip" data-newsrefresh>↻ Refresh</button></div>
+    <div class="sub" style="margin:0 6px 10px">${esc(note || '')}</div>
+    ${hot.length ? `<div class="card" style="padding:12px 14px"><div class="sub" style="margin-bottom:8px">Most mentioned right now</div><div class="chips" style="margin:0">${hot.map(([t, x]) => `<button class="chip" data-open="${esc(t)}"><i class="dot" style="background:${x.s > 0 ? 'var(--up)' : x.s < 0 ? 'var(--down)' : 'var(--mute)'}"></i>${esc(t)} · ${x.n} ${x.n === 1 ? 'story' : 'stories'}</button>`).join('')}</div></div>` : ''}
+    <div class="card" style="padding:6px 14px">${items.map(n => `<div class="nw"><i class="dot" style="background:${n.s > 0 ? 'var(--up)' : n.s < 0 ? 'var(--down)' : 'var(--mute)'}"></i><div><a href="${href(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>
+      <div class="m"><span>${esc(n.publisher)} · ${esc(ago(+n.time))}</span>${n.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+      ${n.mentions.length || n.themes.length ? `<div class="m" style="margin-top:6px">${n.mentions.length ? `<span>Names</span>${n.mentions.map(t => chip(t)).join('')}` : ''}${n.themes.map(th => `<span>${esc(th.label)}:</span>${th.tickers.map(t => chip(t)).join('')}`).join('')}</div>` : ''}</div></div>`).join('') || '<div class="empty">No stories match this filter.</div>'}</div>`;
+}
+function renderNews() { $('#news').innerHTML = newsFeed(S.news, S.newsFilter || 'All', S.newsMine ? new Set(S.tickers) : null, S.newsNote); }
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-newsf]');
+  if (f) { S.newsFilter = f.dataset.newsf; return renderNews(); }
+  if (e.target.closest('[data-newsmine]')) { S.newsMine = !S.newsMine; return renderNews(); }
+  if (e.target.closest('[data-newsrefresh]')) loadNews(true);
+});
 function outlookCard(o) {
   if (!o) return '';
   const row = (name, v, note) => `<div class="fac"><span>${name}</span><span class="sub">${esc(note)}</span>${v == null ? '<span class="sub" style="text-align:right">no data</span>' : `<span style="display:flex;align-items:center;gap:8px"><b style="width:34px;text-align:right">${v > 0 ? '+' : ''}${v}</b><span style="flex:1">${sentBar(v)}</span></span>`}</div>`;
@@ -650,6 +680,7 @@ function show(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
   if (view === 'calendar') renderCalendar();
   if (view === 'signals') renderSignals();
+  if (view === 'news') { renderNews(); loadNews(); }
   if (view === 'options') renderOptions();
   if (view === 'jets') { if (!map) initMap(); map.invalidateSize(); loadJets(); } else clearTimeout(jetTimer);
 }

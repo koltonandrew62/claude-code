@@ -137,6 +137,16 @@ under a name. A "Describe what you want" box lets Claude draft the conditions fr
 draft lands in the builder so you can check and edit it before running. The results header also has a
 find box and a Copy table button (CSV to the clipboard).
 
+## News
+
+The **News** tab is a running feed of market stories (Google News' business section plus searches for
+deals, FDA decisions and earnings). Each story shows its tone, its topics, the stocks it **names**
+(matched by ticker or company name) and the **themes** it belongs to with the funds and bellwethers
+that usually move with them (oil, rates and the Fed, chips and AI, China and tariffs, housing, gold,
+crypto, biotech, banks, airlines, retail, EVs, the whole market). A strip at the top shows the most
+mentioned stocks. In the PC version it is live and re-read every five minutes; the hosted edition
+shows the snapshot written by `web/feed.js`.
+
 ## Markets covered
 
 US-listed stocks and ETFs get everything. Asian and European companies are covered through their US

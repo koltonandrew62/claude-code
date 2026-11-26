@@ -108,6 +108,21 @@ test('price ranges nest, widen with the horizon, and lean with the outlook score
   assert.strictEqual(S.ranges(bars.slice(0, 100)), null);
 });
 
+test('news stories are tagged with the stocks they name and the themes they belong to', () => {
+  const companies = { AAPL: 'Apple Inc.', NVDA: 'Nvidia Corp', DOCU: 'Docusign, Inc.', BOX: 'Box Inc', VRTX: 'Vertex Pharmaceuticals Inc' };
+  const idx = S.aliasIndex(companies), known = new Set(Object.keys(companies));
+  const tag = t => S.affected(t, idx, known);
+  assert.deepStrictEqual(tag('NVIDIA and Apple lead chip rally as AI demand soars').mentions.sort(), ['AAPL', 'NVDA']);
+  assert.strictEqual(tag('NVIDIA and Apple lead chip rally as AI demand soars').themes[0].label, 'Chips & AI');
+  assert.deepStrictEqual(tag('Vertex Pharmaceuticals wins FDA approval for pain drug').mentions, ['VRTX']);
+  assert.deepStrictEqual(tag('Acme Robotics (NASDAQ:ACME) jumps after earnings').mentions, ['ACME']); // an exchange-qualified ticker counts even if unknown
+  assert.deepStrictEqual(tag('Think outside the box: five gift ideas').mentions, []); // everyday words are not companies
+  assert.deepStrictEqual(tag('Is Box (BOX) a buy after its quarter?').mentions, ['BOX']);
+  const fed = tag('Oil slides and Treasury yields jump after the Fed signals fewer rate cuts');
+  assert.deepStrictEqual(fed.themes.map(t => t.label), ['Oil & energy', 'Interest rates & the Fed']);
+  assert.ok(fed.themes[0].tickers.includes('XLE'));
+});
+
 test('option chain normalizers accept Tradier and Alpha Vantage payloads', () => {
   const t = normTradier({ options: { option: [{ expiration_date: '2026-12-18', option_type: 'put', strike: 16, bid: 0.1, ask: 0.2, last: null, volume: 3, open_interest: 10, greeks: { delta: -0.2, mid_iv: 0.38 } }] } });
   assert.deepStrictEqual(t[0], { exp: '2026-12-18', type: 'P', strike: 16, bid: 0.1, ask: 0.2, last: null, iv: 0.38, delta: -0.2, vol: 3, oi: 10 });

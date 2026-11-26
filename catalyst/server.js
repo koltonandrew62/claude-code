@@ -5,7 +5,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { analyze, predict, clear } = require('./lib/analyze');
+const { analyze, predict, marketNews, clear } = require('./lib/analyze');
 const settings = require('./lib/settings');
 const src = require('./lib/sources');
 const jets = require('./lib/jets');
@@ -48,6 +48,7 @@ http.createServer(async (req, res) => {
       const { provider } = await body(req);
       try { await src.testProvider(String(provider)); return json(res, 200, { ok: true }); } catch (e) { return json(res, 200, { ok: false, error: e.name === 'TimeoutError' ? 'timed out' : e.message === 'fetch failed' ? 'could not reach the service' : e.message }); }
     }
+    if (u.pathname === '/api/news') return json(res, 200, await marketNews());
     if (u.pathname === '/api/universes') return json(res, 200, universes);
     if (u.pathname === '/api/status') return json(res, 200, src.status);
     if (u.pathname === '/api/jets') return json(res, 200, jets.state());

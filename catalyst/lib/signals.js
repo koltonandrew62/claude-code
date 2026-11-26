@@ -127,7 +127,7 @@ const TOPICS = {
 // Law-firm "investor alert" ads are the same kind of noise.
 const NOISE = /stock price, news, quote|\bshares (acquired|bought|purchased|sold) by\b|\b(acquires|buys|sells|purchases|trims|boosts|cuts|raises|lowers|reduces|increases|grows|has|takes|holds)\b[^.]{0,60}\b(stake|position|holdings?|shares)\b|\b(stake|position|holdings?) (in|by) |\b(stock|investor|shareholder) alert\b|class action|\bllc investigates\b|law (firm|offices)|\b(lead plaintiff|securities fraud) /i;
 
-function sentiment(items, now = Date.now()) {
+function sentiment(items, now = Date.now(), limit = 40) {
   const scored = (items || [])
     .filter(n => now - n.time < 30 * DAY && now >= n.time - DAY && !NOISE.test(n.title))
     .map(n => {
@@ -147,7 +147,7 @@ function sentiment(items, now = Date.now()) {
     score, label: score > 20 ? 'Positive' : score < -20 ? 'Negative' : 'Neutral',
     pos, neg, neu: scored.length - pos - neg, count: scored.length,
     buzz: d21 >= 6 ? d3 / (d21 / 7) : null, // last 3 days vs a normal 3-day stretch
-    items: scored.slice(0, 40),
+    items: scored.slice(0, limit),
   };
 }
 
@@ -543,4 +543,49 @@ function ranges(bars, score = 0, horizons = [5, 21, 63]) {
   });
 }
 
-module.exports = { iso, daysBetween, pct, clamp, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar, forecast, bs, markOptions, outlook, ranges };
+// ---------- News: which stocks does a story touch? ----------
+
+// Macro and sector stories rarely name a ticker, so each theme lists the funds and bellwethers that usually move with it.
+const THEMES = [
+  ['Oil & energy', /\b(oil|crude|opec|brent|wti|natural gas|gasoline)\b/i, ['XLE', 'XOM', 'CVX', 'USO']],
+  ['Interest rates & the Fed', /\b(fed|federal reserve|powell|rate cuts?|rate hikes?|interest rates?|treasury yields?|bond yields?|inflation|cpi|jobs report|payrolls)\b/i, ['TLT', 'XLF', 'KRE', 'SPY']],
+  ['Chips & AI', /\b(chips?|chipmakers?|semiconductors?|artificial intelligence|\bai\b|gpus?|data cent(er|re)s?)\b/i, ['SMH', 'NVDA', 'AMD', 'AVGO']],
+  ['China & tariffs', /\b(tariffs?|trade war|china|chinese|beijing|export controls?)\b/i, ['FXI', 'KWEB', 'BABA']],
+  ['Housing', /\b(housing|mortgage rates?|home sales|homebuilders?)\b/i, ['XHB', 'ITB']],
+  ['Gold & metals', /\b(gold|silver|copper|precious metals)\b/i, ['GLD', 'GDX', 'SLV']],
+  ['Crypto', /\b(bitcoin|crypto|cryptocurrenc(y|ies)|ethereum|stablecoins?)\b/i, ['IBIT', 'COIN', 'MSTR']],
+  ['Drug pricing & biotech', /\b(drug pric(e|es|ing)|drugmakers?|medicare|biotechs?|pharma)\b/i, ['XBI', 'IBB', 'XLV']],
+  ['Banks', /\b(banks?|lenders?|credit losses|deposits)\b/i, ['XLF', 'KRE', 'JPM']],
+  ['Airlines & travel', /\b(airlines?|air travel|cruise lines?)\b/i, ['JETS']],
+  ['Retail & the consumer', /\b(retail sales|retailers?|consumer spending|black friday|holiday (sales|shopping)|shoppers)\b/i, ['XRT', 'WMT', 'AMZN']],
+  ['Electric vehicles', /\b(electric vehicles?|evs|ev makers?)\b/i, ['TSLA']],
+  ['The whole market', /\b(wall street|stock market|stocks (rise|fall|rally|slump|slide|tumble|jump|climb|sink|surge|drop)|s&p 500|nasdaq|dow jones|futures)\b/i, ['SPY', 'QQQ', 'DIA']],
+];
+const NAME_TAIL = /[\s,.]+(inc|incorporated|corp|corporation|co|company|ltd|limited|plc|nv|sa|ag|se|ab|adr|holdings?|group|platforms|technolog(y|ies)|pharmaceuticals?|therapeutics|biosciences|biopharma|laboratories|international|industries|enterprises|class [a-c])$/i;
+// Company names that are also everyday words: these only count when the ticker itself is written out.
+const AMBIGUOUS = new Set(['box', 'unity', 'sea', 'path', 'snap', 'zoom', 'beam', 'grab', 'arm', 'match', 'block', 'gap']);
+
+// { AAPL: 'Apple Inc.' } -> [{ t: 'AAPL', re: /\bApple\b/i }]
+function aliasIndex(companies) {
+  const out = [];
+  for (const [t, raw] of Object.entries(companies || {})) {
+    let name = String(raw).replace(/\s*[\/\\].*$/, '').replace(/[.,]+$/, '').trim();
+    for (let i = 0; i < 4 && NAME_TAIL.test(name); i++) name = name.replace(NAME_TAIL, '').replace(/[.,&\s]+$/, '');
+    if (name.length < 4 || AMBIGUOUS.has(name.toLowerCase())) continue;
+    out.push({ t, re: new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\b`, 'i') });
+  }
+  return out;
+}
+
+// Stocks a headline names outright (by ticker or company name), plus up to two themes it belongs to.
+function affected(title, aliases, known) {
+  const mentions = new Set(), take = t => { if (!known || known.has(t)) mentions.add(t); };
+  for (const m of title.matchAll(/\((?:NASDAQ|NYSE|NYSEARCA|NYSEAMERICAN|AMEX|OTCMKTS)\s*:\s*([A-Z][A-Z.\-]{0,5})\)/g)) mentions.add(m[1]);
+  for (const m of title.matchAll(/\$([A-Z]{1,5})\b/g)) take(m[1]);
+  for (const m of title.matchAll(/\(([A-Z]{2,5})\)/g)) take(m[1]);
+  for (const a of aliases || []) if (a.re.test(title)) mentions.add(a.t);
+  const themes = THEMES.filter(([, re]) => re.test(title)).slice(0, 2).map(([label, , tickers]) => ({ label, tickers }));
+  return { mentions: [...mentions].slice(0, 6), themes };
+}
+
+module.exports = { iso, daysBetween, pct, clamp, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar, forecast, bs, markOptions, outlook, ranges, aliasIndex, affected };

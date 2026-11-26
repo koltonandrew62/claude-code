@@ -44,7 +44,7 @@ tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
 <header>
   <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="var(--line2)"/><circle cx="12" cy="12" r="6" stroke="var(--ink3)"/><path d="M12 12 19.5 6" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="var(--accent)"/></svg>CATALYST</div>
   <form id="search"><input id="q" placeholder="Analyze any ticker…" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
-  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
+  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="news">News</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
   <div id="live"><i></i><span>Connecting…</span></div>
   <div class="fresh" id="fresh"></div>
 </header>
@@ -85,6 +85,7 @@ tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
   </section>
   <section id="v-options" class="view"><div class="feed wide" id="options"></div></section>
   <section id="v-calendar" class="view"><div class="feed" id="calendar"></div></section>
+  <section id="v-news" class="view"><div class="feed" id="news"></div></section>
   <section id="v-signals" class="view"><div class="feed" id="signals"></div></section>
   <section id="v-jets" class="view"><div id="map"></div><aside id="jetside"></aside></section>
 </main>
@@ -397,8 +398,8 @@ function earningsWeb(results, bars, tech, now = Date.now()) {
 // News sentiment joins the forecast for tickers the back-end snapshot covers; others run on technicals alone.
 const forecastWeb = (bars, sent) => { const fc = SIG.forecast(bars, sent || null); if (fc && !sent) fc.factors = fc.factors.filter(f => f.name !== 'News sentiment'); return fc; };
 const scaleRanges = (rg, k) => rg && rg.map(r => ({ ...r, expected: r.expected * k, lo68: r.lo68 * k, hi68: r.hi68 * k, lo90: r.lo90 * k, hi90: r.hi90 * k })); // re-anchor on the live quote
-// "Asml Holding Nv" -> "ASML Holding NV": restore the ticker and legal suffixes that title-casing flattened
-const tidyName = (n, t) => String(n).replace(/\b(Nv|Sa|Ag|Plc|Se|Ab|Asa|Adr|Ii|Iii)\b/g, m => m.toUpperCase()).replace(new RegExp('\\b' + t.replace(/[^A-Z0-9]/g, '') + '\\b', 'i'), t);
+// "Asml Holding Nv" -> "ASML Holding NV": restore acronyms and legal suffixes that title-casing flattened
+const tidyName = n => String(n).replace(/\b(Nv|Sa|Ag|Plc|Se|Ab|Asa|Adr|Ii|Iii|Asml|Bp|Ubs|Hsbc|Sap|Ing|Relx|Gsk|Amd|Umc|Jd|Nio|Ibm|Kb)\b/g, m => m.toUpperCase());
 const companyName = (f, t) => (String(f?.description || '').match(/^(.{2,60}?)\s+(is|engages|operates|provides|designs|develops|manufactures|offers|owns|focuses|through|together)\b/) || [])[1]?.replace(/,$/, '') || t;
 
 function assemble(ticker, bars, fund, quote, earningsData, filingData, analyst) {
@@ -416,7 +417,7 @@ function assemble(ticker, bars, fund, quote, earningsData, filingData, analyst) 
   const parts = [['M&A', ma.score], ['Earnings', earn.score], ['Event radar', event.score]].concat(fda.applicable ? [['FDA', fda.score]] : []).sort((a, b) => b[1] - a[1]);
   const evidence = [...ma.evidence, ...fda.evidence, ...earn.evidence, ...event.evidence];
   return {
-    ticker, name: fd?.name && fd.name !== ticker ? tidyName(fd.name, ticker) : NAMES[ticker] || companyName(fund, ticker), industry: [fund?.sector, fund?.industry].filter(Boolean).join(' · '), city: [fund?.headquarters_city, fund?.headquarters_state].filter(Boolean).join(', '),
+    ticker, name: fd?.name && fd.name !== ticker ? tidyName(fd.name) : NAMES[ticker] || companyName(fund, ticker), industry: [fund?.sector, fund?.industry].filter(Boolean).join(' · '), city: [fund?.headquarters_city, fund?.headquarters_state].filter(Boolean).join(', '),
     about: String(fund?.description || ''), asOf: Date.now(), full: !!(earningsData || filingData), covered: !!fd, bio: !!fd?.bio,
     price: tech ? { ...tech, last, chg1d: quote?.chg ?? tech.chg1d } : null, forecast: fc, outlook: ol, ranges: scaleRanges(SIG.ranges(bars, ol?.score || 0), last / bars[n - 1].c), analyst: an, fundx: fd?.fundx || null, trend: n > 60 ? bars[n - 1].c / bars[n - 61].c - 1 : null, spark: bars.slice(-60).map(b => b.c),
     fund: { mcap: num(fund?.market_cap), pe: num(fund?.pe_ratio), pb: num(fund?.pb_ratio), yield: num(fund?.dividend_yield), hi52: num(fund?.high_52_weeks), lo52: num(fund?.low_52_weeks), float: num(fund?.float) },
@@ -720,6 +721,15 @@ function renderCalendar() {
   }).join('') : '<div class="empty">Run a screen first — upcoming earnings for those companies are laid out here.</div>') + marketCalendar();
 }
 
+// News comes from the back-end snapshot published beside this page (a hosted page cannot read news sites itself).
+async function loadNews(force) {
+  if (S.news && !force) return;
+  const d = await fetch('data/news.json', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  S.news = d?.items ? d : { at: 0, items: [] };
+  S.newsNote = d?.items ? `Snapshot taken ${ago(+d.at)} · ${d.items.length} stories · the PC version shows this live` : 'No news snapshot has been published yet.';
+  if (S.view === 'news') renderNews();
+}
+
 // ---------- Signal tape ----------
 function renderSignals() {
   const rows = [];
@@ -813,6 +823,7 @@ function show(view) {
   if (view === 'calendar') { renderCalendar(); loadMarketCalendar(); }
   if (view === 'options') renderOptions();
   if (view === 'signals') renderSignals();
+  if (view === 'news') { renderNews(); loadNews(); }
   if (view === 'jets') showJets();
 }
 

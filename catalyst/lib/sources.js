@@ -140,6 +140,20 @@ function news(ticker, name) {
   return get(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`, { source: 'News', ttl: 20 * MIN, gap: 400, ua: WEB_UA, text: true, pick: parseRss });
 }
 
+// Market-wide headlines: Google News' business section plus a few searches for the events this app tracks.
+const NEWS_FEEDS = ['https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en']
+  .concat(['stock market today', 'merger OR acquisition OR takeover stock', 'FDA approval OR "clinical trial" stock', 'earnings beat OR miss OR guidance stock']
+    .map(q => `https://news.google.com/rss/search?q=${encodeURIComponent(q + ' when:2d')}&hl=en-US&gl=US&ceid=US:en`));
+async function marketNews() {
+  const lists = await Promise.all(NEWS_FEEDS.map(u => get(u, { source: 'News', ttl: 5 * MIN, gap: 400, ua: WEB_UA, text: true, pick: parseRss }).catch(() => [])));
+  const seen = new Set(), out = [];
+  for (const n of lists.flat().sort((a, b) => b.time - a.time)) {
+    const key = n.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 70);
+    if (!seen.has(key)) { seen.add(key); out.push(n); }
+  }
+  return out;
+}
+
 function trials(name) {
   const lead = shortName(name), first = lead.split(' ')[0].toLowerCase();
   const q = new URLSearchParams({
@@ -293,4 +307,4 @@ async function testProvider(p) {
   throw new Error('unknown provider');
 }
 
-module.exports = { status, shortName, parseRss, resolve, submissions, facts, fullText, prices, news, trials, approvals, geocode, aircraftByType, aircraftByReg, optionsProvider, normTradier, normAlphaVantage, optionExpirations, optionChain, earningsCalendar, avSentiment, testProvider };
+module.exports = { status, shortName, parseRss, resolve, submissions, facts, fullText, prices, news, marketNews, trials, approvals, geocode, aircraftByType, aircraftByReg, optionsProvider, normTradier, normAlphaVantage, optionExpirations, optionChain, earningsCalendar, avSentiment, testProvider };

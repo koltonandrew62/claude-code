@@ -91,4 +91,12 @@ async function predict(symbol, exp) {
   };
 }
 
-module.exports = { analyze, predict, clear: () => memo.clear() };
+// Latest market stories, each scored for tone and tagged with the stocks it names and the themes it belongs to.
+const companies = require('./companies.json');
+const aliases = S.aliasIndex(companies), known = new Set(Object.keys(companies));
+async function marketNews() {
+  const scored = S.sentiment(await src.marketNews(), Date.now(), 160);
+  return { at: Date.now(), items: scored.items.map(n => ({ title: n.title, publisher: n.publisher, link: n.link, time: n.time, s: n.s, tags: n.tags, ...S.affected(n.title, aliases, known) })) };
+}
+
+module.exports = { analyze, predict, marketNews, clear: () => memo.clear() };
