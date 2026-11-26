@@ -24,6 +24,7 @@ async function one(t) {
       name: r.name, city: r.city, bio: r.bio, news: newsLite(r.news),
       merger: { score: r.merger.score, level: r.merger.level, pending: r.merger.pending, evidence: trim(r.merger.evidence, 7), marks: r.merger.marks.slice(0, 8) },
       fda: r.fda.applicable ? { applicable: true, score: r.fda.score, level: r.fda.level, approvals: r.fda.approvals, catalysts: r.fda.catalysts.slice(0, 8), evidence: trim(r.fda.evidence, 4) } : null,
+      fundx: r.fund ? { revTTM: r.fund.revTTM, revGrowth: r.fund.revGrowth, netCash: r.fund.netCash, evSales: r.fund.evSales, runwayMonths: r.fund.runwayMonths } : null,
       filings: r.filings.slice(0, 15), warnings: r.warnings,
     };
   } catch {

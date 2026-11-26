@@ -65,6 +65,18 @@ reliably predict a merger or an FDA decision; this tells you where the public ev
 - **News sentiment** — Recent headlines scored with a finance word list, weighted toward the last few
   days, with fund-holdings spam and law-firm ads removed.
 
+## Outlook and price ranges
+
+- **Outlook (−100 to +100)** — one bullish / bearish read built from three separate scores: *technical*
+  (trend, momentum, RSI, MACD), *fundamental* (EPS growth, how often it beats estimates, revenue growth,
+  analyst ratings and price targets) and *news* (headline tone), weighted 45 / 35 / 20. A missing score
+  is left out and the weights rebalanced. The hosted edition ranks screens by it: most bullish, most
+  bearish, best earnings growth, biggest beats, most bullish earnings setup, analyst favorites.
+- **Price ranges** — 68% and 90% confidence bands for one week, one month and three months. The width
+  is taken from the stock's own record: a 90% band is as wide as it had to be to contain nine out of
+  ten moves of that length over the past two years. The expected price is shifted by the outlook
+  score, and only slightly, because how far a stock can move is far easier to estimate than which way.
+
 ## Price forecast and options
 
 - **Price forecast** — Five technical factors (price vs its 50-day average, 50- vs 200-day trend, 20-day

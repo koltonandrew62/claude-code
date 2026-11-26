@@ -178,7 +178,7 @@ const S = { tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -
 const ok = () => S.tickers.map(t => S.res[t]).filter(r => r && !r.error);
 
 // ---------- Screener ----------
-const COLS = [['ticker', 'Company', r => r.ticker], ['price', 'Price', r => r.price?.last, 1], ['chg', '1D', r => r.price?.chg1d, 1], ['overall', 'Catalyst', r => r.scores.overall], ['merger', 'M&A', r => r.scores.merger], ['fda', 'FDA', r => r.scores.fda], ['earnings', 'Earnings', r => r.scores.earnings], ['event', 'Event', r => r.scores.event], ['sentiment', 'News', r => r.scores.sentiment], ['next', 'Next earnings', r => r.earnings.daysTo, 1], ['mcap', 'Mkt cap', r => r.fund?.mcap, 1]];
+const COLS = [['ticker', 'Company', r => r.ticker], ['price', 'Price', r => r.price?.last, 1], ['chg', '1D', r => r.price?.chg1d, 1], ['overall', 'Catalyst', r => r.scores.overall], ['merger', 'M&A', r => r.scores.merger], ['fda', 'FDA', r => r.scores.fda], ['earnings', 'Earnings', r => r.scores.earnings], ['event', 'Event', r => r.scores.event], ['sentiment', 'News', r => r.scores.sentiment], ['outlook', 'Outlook', r => r.outlook?.score], ['next', 'Next earnings', r => r.earnings.daysTo, 1], ['mcap', 'Mkt cap', r => r.fund?.mcap, 1]];
 const SLIDERS = [['overall', 'Catalyst score', 'var(--accent)'], ['merger', 'M&A signal', 'var(--ma)'], ['fda', 'FDA catalyst', 'var(--fda)'], ['earnings', 'Earnings setup', 'var(--earn)'], ['event', 'Event radar', 'var(--event)']];
 
 function passes(r) {
@@ -237,11 +237,11 @@ function renderTable() {
       <td class="co"><b>${esc(r.ticker)}</b><span>${esc(r.name)}</span></td>
       <td class="num">${p ? '$' + p.last.toFixed(2) : '—'}</td><td class="num ${p?.chg1d >= 0 ? 'up' : 'dn'}">${p ? fPct(p.chg1d) : '—'}</td>
       ${scoreCell(s.overall, 'var(--accent)', 1)}${scoreCell(s.merger, 'var(--ma)')}${scoreCell(s.fda, 'var(--fda)')}${scoreCell(s.earnings, 'var(--earn)')}${scoreCell(s.event, 'var(--event)')}
-      <td class="sc"><b>${s.sentiment > 0 ? '+' : ''}${s.sentiment}</b>${sentBar(s.sentiment)}</td>
+      <td class="sc"><b>${s.sentiment > 0 ? '+' : ''}${s.sentiment}</b>${sentBar(s.sentiment)}</td>${r.outlook ? `<td class="sc" data-tip="${esc(r.outlook.label)}"><b>${r.outlook.score > 0 ? '+' : ''}${r.outlook.score}</b>${sentBar(r.outlook.score)}</td>` : '<td class="sc sub">—</td>'}
       <td class="num">${e.nextDate ? `${fDate(e.nextDate)} <span class="sub">· ${e.daysTo}d</span>` : '—'}</td><td class="num">${fMoney(r.fund?.mcap)}</td>
       <td class="why" title="${esc(r.thesis[0]?.text || '')}">${esc(r.thesis[0]?.text || '—')}</td></tr>`;
-  }).join('') + Array(Math.min(pending, 6)).fill(`<tr class="sk"><td colspan="13"><span></span></td></tr>`).join('')
-    || `<tr><td colspan="13" class="empty">${S.tickers.length ? 'Nothing matches these criteria. Loosen a filter or hit Reset.' : 'Pick a universe and run a screen.'}</td></tr>`;
+  }).join('') + Array(Math.min(pending, 6)).fill(`<tr class="sk"><td colspan="14"><span></span></td></tr>`).join('')
+    || `<tr><td colspan="14" class="empty">${S.tickers.length ? 'Nothing matches these criteria. Loosen a filter or hit Reset.' : 'Pick a universe and run a screen.'}</td></tr>`;
   $('#count').innerHTML = `${rows.length} match${rows.length === 1 ? '' : 'es'} <span class="sub">of ${S.tickers.length} screened${pending ? ` · loading ${pending}` : ''}${failed ? ` · ${failed} unavailable` : ''}</span>`;
   $('#bar i').style.width = S.tickers.length ? (100 * (S.tickers.length - pending)) / S.tickers.length + '%' : '0';
   $('#bar').style.opacity = pending ? 1 : 0;
@@ -359,6 +359,7 @@ function renderDetail(r) {
   <div class="card hero">${ring(s.overall)}<div><div class="eyebrow">Catalyst score · led by ${esc(r.driver)}</div><ul class="thesis">${r.thesis.map(t => `<li><i style="background:${CAT_COLOR[t.cat]}"></i><span>${esc(t.text)}</span></li>`).join('') || '<li>No notable signals right now.</li>'}</ul></div></div>
   <div class="tiles">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">News sentiment</span><b>${nw.score > 0 ? '+' : ''}${nw.score}</b><em>${nw.label} · ${nw.count} headlines</em>${sentBar(nw.score)}</div></div>
   <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:rgba(255,255,255,.25);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
+  ${outlookCard(r.outlook)}${rangesCard(r.ranges, r.price?.last)}
   ${forecastCard(r.forecast)}
   <div class="card"><h3>Key numbers</h3><div class="stats">${stat('Market cap', fMoney(f.mcap) + (f.mcapStale ? ' *' : ''))}${stat('Revenue (12 mo)', fMoney(f.revTTM))}${stat('Revenue growth', fPct(f.revGrowth))}${stat('EV / sales', f.evSales != null ? f.evSales.toFixed(1) + 'x' : '—')}${stat('Net cash', fMoney(f.netCash))}${stat('Cash runway', f.runwayMonths ? Math.round(f.runwayMonths) + ' months' : 'Profitable / n.a.')}${stat('52-week range', p?.pos52 != null ? Math.round(p.pos52 * 100) + '% of the way up' : '—')}${stat('Volume vs normal', p?.volRatio ? p.volRatio.toFixed(2) + 'x' : '—')}</div></div>
   <div class="card"><h3><span><i class="dot" style="background:var(--ma)"></i>M&A signals</span><span class="tag">${esc(r.merger.level)}</span></h3>${evi(r.merger.evidence)}</div>
@@ -412,6 +413,36 @@ function renderSignals() {
 }
 
 // ---------- Direction forecast & options ----------
+function outlookCard(o) {
+  if (!o) return '';
+  const row = (name, v, note) => `<div class="fac"><span>${name}</span><span class="sub">${esc(note)}</span>${v == null ? '<span class="sub" style="text-align:right">no data</span>' : `<span style="display:flex;align-items:center;gap:8px"><b style="width:34px;text-align:right">${v > 0 ? '+' : ''}${v}</b><span style="flex:1">${sentBar(v)}</span></span>`}</div>`;
+  return `<div class="card"><h3>Outlook<span class="tag">${esc(o.label)}</span></h3>
+    <div class="fch"><div class="call ${o.score >= 15 ? 'up' : o.score <= -15 ? 'dn' : ''}">${o.score > 0 ? '+' : ''}${o.score}</div><div class="sub" style="font-size:13px;flex:1;min-width:200px">Overall lean from −100 (bearish) to +100 (bullish). It blends three separate scores: technical 45%, fundamental 35%, news 20%.</div></div>
+    <div style="margin-top:12px">${row('Technical score', o.technical, 'trend, momentum, RSI, MACD')}${row('Fundamental score', o.fundamental, o.parts.length ? o.parts.map(p => p.name.toLowerCase()).join(', ') : 'no earnings or analyst data')}${row('News score', o.news, o.news == null ? 'no recent headlines' : 'tone of recent headlines')}</div>
+    ${o.parts.length ? `<div class="note">${o.parts.map(p => esc(p.note)).join(' · ')}.</div>` : ''}</div>`;
+}
+
+function rangesCard(rg, last, target) {
+  if (!rg || !last) return '';
+  const W = 760, L = 78, R = 14, row = 46, H = rg.length * row + 34, name = { 5: '1 week', 21: '1 month', 63: '3 months' };
+  const lo = Math.min(last, ...rg.map(r => r.lo90)), hi = Math.max(last, ...rg.map(r => r.hi90)), pad = (hi - lo) * 0.09;
+  const x = v => L + ((v - (lo - pad)) / (hi - lo + 2 * pad)) * (W - L - R), money = v => '$' + (v >= 1000 ? v.toFixed(0) : v.toFixed(2));
+  const rows = rg.map((r, i) => {
+    const y = 26 + i * row;
+    return `<g data-tip="${name[r.days] || r.days + ' days'} · expected ${money(r.expected)} · 68% range ${money(r.lo68)} – ${money(r.hi68)} · 90% range ${money(r.lo90)} – ${money(r.hi90)}">
+      <text x="0" y="${y + 4}" style="fill:var(--ink2);font-size:12px">${name[r.days] || r.days + 'd'}</text>
+      <rect x="${x(r.lo90)}" y="${y - 6}" width="${x(r.hi90) - x(r.lo90)}" height="12" rx="6" fill="var(--accent)" opacity=".2"/>
+      <rect x="${x(r.lo68)}" y="${y - 6}" width="${x(r.hi68) - x(r.lo68)}" height="12" rx="6" fill="var(--accent)" opacity=".5"/>
+      <circle cx="${x(r.expected)}" cy="${y}" r="5" fill="var(--accent)" stroke="#000" stroke-width="2"/>
+      <text class="val" x="${x(r.lo90)}" y="${y + 21}" text-anchor="middle">${money(r.lo90)}</text><text class="val" x="${x(r.hi90)}" y="${y + 21}" text-anchor="middle">${money(r.hi90)}</text></g>`;
+  }).join('');
+  const far = rg[rg.length - 1], tgt = target && target > lo - pad && target < hi + pad ? `<line x1="${x(target)}" x2="${x(target)}" y1="12" y2="${H - 22}" stroke="var(--earn)" stroke-dasharray="2 3"/><text x="${x(target)}" y="${H - 8}" text-anchor="middle">analyst target ${money(target)}</text>` : '';
+  return `<div class="card"><h3>Price ranges<span class="key"><span><i style="background:var(--accent);opacity:.55;border-radius:2px"></i>68% confidence</span><span><i style="background:var(--accent);opacity:.25;border-radius:2px"></i>90% confidence</span><span><i style="background:var(--accent)"></i>Expected</span></span></h3>
+    <svg class="chart" viewBox="0 0 ${W} ${H}"><line x1="${x(last)}" x2="${x(last)}" y1="12" y2="${H - 22}" stroke="#6c6c78" stroke-dasharray="3 3"/><text x="${x(last)}" y="8" text-anchor="middle">now ${money(last)}</text>${tgt}${rows}</svg>
+    <div class="stats" style="margin-top:8px">${rg.map(r => `<div><span>${name[r.days] || r.days + ' days'} · 90% range</span><b>${money(r.lo90)} – ${money(r.hi90)}</b></div>`).join('')}<div><span>3-month expected</span><b>${money(far.expected)} <span class="sub">${fPct(far.expected / last - 1)}</span></b></div></div>
+    <div class="note">The width of each band comes from this stock's own record: a 90% band is as wide as it needed to be to contain nine out of ten moves of that length over the past two years (${far.samples} three-month samples). The expected price is shifted by the outlook score, and only slightly — how far a stock can move is much easier to estimate than which way. A big surprise can still break any range.</div></div>`;
+}
+
 function forecastCard(fc, title = 'Direction forecast') {
   if (!fc) return '';
   const down = fc.verdict === 'Down', p = down ? 1 - fc.pUp : fc.pUp, stat = (n, v) => `<div><span>${n}</span><b>${v}</b></div>`;
@@ -435,9 +466,13 @@ function chainCard(d) {
     if (!spot && r.strike > d.price) { spot = true; body += `<tr class="spot"><td colspan="9">$${d.price.toFixed(2)} · current price</td></tr>`; }
     body += `<tr>${r.call ? cell(r.call).join('') : blank}<td class="k">${r.strike % 1 ? r.strike.toFixed(2) : r.strike}</td>${r.put ? cell(r.put).reverse().join('') : blank}</tr>`;
   }
+  // The model's favourites: green contracts that actually trade, away from the deep in/out-of-the-money extremes.
+  const picks = side => ch.rows.map(r => ({ k: r.strike, o: r[side] })).filter(x => x.o && x.o.up && x.o.mid >= 0.1 && x.o.vol >= 10 && (x.o.delta == null || (Math.abs(x.o.delta) >= 0.15 && Math.abs(x.o.delta) <= 0.85))).sort((a, b) => b.o.change - a.o.change).slice(0, 3);
+  const best = [...picks('call').map(x => ['call', x]), ...picks('put').map(x => ['put', x])];
+  const standouts = `<div class="sub" style="margin:0 0 12px">${best.length ? 'Top-ranked liquid contracts by expected change: ' + best.map(([t, x]) => `<span class="tag" style="margin:0 6px 4px 0;display:inline-block">$${x.k} ${t} ${fPct(Math.min(9.99, x.o.change), 0)}</span>`).join('') : 'No liquid contract is expected to gain over this window: time decay outweighs the forecast.'}</div>`;
   const count = side => { const a = ch.rows.filter(r => r[side]); return `${a.filter(r => r[side].up).length} green · ${a.filter(r => !r[side].up).length} red`; };
   return `<div class="card"><h3>Option chain · ${ch.rows.length} strikes<span class="key"><span>Calls: ${count('call')}</span><span>Puts: ${count('put')}</span></span></h3>
-    <div class="exps">${ch.expirations.map(x => `<button class="chip${x === ch.exp ? ' on' : ''}" data-exp="${x}">${fDate(x, 1)}</button>`).join('')}</div>
+    ${standouts}<div class="exps">${ch.expirations.map(x => `<button class="chip${x === ch.exp ? ' on' : ''}" data-exp="${x}">${fDate(x, 1)}</button>`).join('')}</div>
     <div class="chainwrap"><table class="chain"><thead><tr><th>Call outlook</th><th>Price</th><th>IV</th><th>Delta</th><th class="k">Strike</th><th>Delta</th><th>IV</th><th>Price</th><th>Put outlook</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="note"><b style="color:var(--up)">Green ▲</b> = the model expects that contract to be worth more after ${ch.holdDays} trading day${ch.holdDays === 1 ? '' : 's'}; <b style="color:var(--down)">red ▼</b> = worth less. The percentage is the expected change in the option's value: it is priced across the range of places the forecast says the stock could land, then compared with today, so time decay counts against every contract. Expected volatility blends what the option market implies with what the stock has actually been doing. Expires in ${ch.daysToExpiry} days · at-the-money implied volatility ${Math.round(ch.atmIv * 100)}% · data via ${ch.provider === 'tradier' ? 'Tradier' : 'Alpha Vantage (prior session)'}.</div></div>`;
 }
@@ -449,7 +484,7 @@ function renderOptions() {
       : o.error ? `<div class="empty">${esc(o.error)}.</div>`
       : !d ? '<div class="empty">Pick any stock or ETF. You get an up / down forecast for the price, and every option strike marked green or red.</div>'
       : `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div><div style="font-size:24px;font-weight:700">${esc(d.symbol)}</div><div class="sub">${esc(d.name)}</div></div><div style="text-align:right"><b style="font-size:22px">$${d.price.toFixed(2)}</b><div class="${d.chg1d >= 0 ? 'up' : 'dn'}">${fPct(d.chg1d, 2)} today</div></div></div>`
-        + (forecastCard(d.forecast, 'Price forecast') || '<div class="card"><div class="empty">This symbol needs about a year of price history before a forecast can be made.</div></div>') + chainCard(d));
+        + outlookCard(d.outlook) + rangesCard(d.ranges, d.price) + (forecastCard(d.forecast, 'Price forecast') || '<div class="card"><div class="empty">This symbol needs about a year of price history before a forecast can be made.</div></div>') + chainCard(d));
   const w = $('.chainwrap'), s = $('.chain .spot');
   if (w && s) w.scrollTop = s.offsetTop - w.clientHeight / 2;
 }

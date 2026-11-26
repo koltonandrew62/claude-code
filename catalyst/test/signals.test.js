@@ -86,6 +86,28 @@ test('options marking: a bullish forecast turns the at-the-money call green and 
   assert.ok(Math.abs(S.bs(100, 100, 1, 0.2, true) - 7.966) < 0.01); // textbook Black-Scholes value at zero rates
 });
 
+test('outlook blends technical, fundamental and news scores and rebalances when one is missing', () => {
+  const fc = { tech: 0.5 }, bullish = { count: 10, score: 60 };
+  const full = S.outlook({ fc, epsYoY: 0.4, beatRate: 0.75, analyst: { buy: 18, hold: 4, sell: 1, target: 130 }, last: 100, sent: bullish });
+  assert.strictEqual(full.technical, 80);
+  assert.ok(full.fundamental > 50 && full.news === 60 && full.score > 60 && full.label === 'Strongly bullish');
+  const techOnly = S.outlook({ fc: { tech: -0.5 }, last: 100, sent: null });
+  assert.deepStrictEqual([techOnly.score, techOnly.fundamental, techOnly.news, techOnly.label], [-80, null, null, 'Strongly bearish']);
+  assert.strictEqual(S.outlook({ fc: null, last: 100, sent: null }), null);
+});
+
+test('price ranges nest, widen with the horizon, and lean with the outlook score', () => {
+  let p = 100, seed = 42;
+  const rnd = () => (seed = (seed * 48271) % 2147483647) / 2147483647; // fixed-seed random walk, so the test is repeatable
+  const bars = Array.from({ length: 500 }, (_, i) => { p *= 1 + (rnd() - 0.5) * 0.04; return { d: S.iso(NOW - (500 - i) * 864e5), o: p, h: p, l: p, c: p, v: 1 }; });
+  const flat = S.ranges(bars, 0), bull = S.ranges(bars, 100);
+  for (const r of flat) assert.ok(r.lo90 <= r.lo68 && r.lo68 < r.expected && r.expected < r.hi68 && r.hi68 <= r.hi90);
+  assert.ok(flat[2].hi90 / flat[2].lo90 > flat[0].hi90 / flat[0].lo90); // three months is wider than one week
+  assert.ok(bull[1].expected > flat[1].expected);
+  assert.deepStrictEqual(flat.map(r => r.days), [5, 21, 63]);
+  assert.strictEqual(S.ranges(bars.slice(0, 100)), null);
+});
+
 test('option chain normalizers accept Tradier and Alpha Vantage payloads', () => {
   const t = normTradier({ options: { option: [{ expiration_date: '2026-12-18', option_type: 'put', strike: 16, bid: 0.1, ask: 0.2, last: null, volume: 3, open_interest: 10, greeks: { delta: -0.2, mid_iv: 0.38 } }] } });
   assert.deepStrictEqual(t[0], { exp: '2026-12-18', type: 'P', strike: 16, bid: 0.1, ask: 0.2, last: null, iv: 0.38, delta: -0.2, vol: 3, oi: 10 });

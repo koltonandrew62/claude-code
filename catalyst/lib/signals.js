@@ -444,7 +444,7 @@ function forecast(bars, sent, av, h = 5) {
   const mad = mid(recent.map(x => Math.abs(x - med))) * 1.4826 || dailySigma;
   const robustSigma = sd(recent.map(x => clamp(x, med - 3 * mad, med + 3 * mad)));
   return {
-    horizon: h, last, pUp, verdict: pUp >= 0.55 ? 'Up' : pUp <= 0.45 ? 'Down' : 'No clear edge',
+    horizon: h, last, tech: t, pUp, verdict: pUp >= 0.55 ? 'Up' : pUp <= 0.45 ? 'Down' : 'No clear edge',
     expRet, sigma, dailySigma, robustSigma, low: last * Math.exp(expRet - sigma), high: last * Math.exp(expRet + sigma), hitRate, samples,
     factors: [
       { name: 'Price vs 50-day average', v: f.trend, note: `${(Math.abs(last / s50 - 1) * 100).toFixed(1)}% ${last >= s50 ? 'above' : 'below'}` },
@@ -497,4 +497,50 @@ function markOptions(contracts, fc, exp, now = Date.now()) {
   return { holdDays: Math.max(1, Math.round(tradingDays)), daysToExpiry: Math.round(daysLeft), atmIv, rows: [...rows.values()].sort((a, b) => a.strike - b.strike) };
 }
 
-module.exports = { iso, daysBetween, pct, clamp, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar, forecast, bs, markOptions };
+// ---------- Outlook: one bullish / bearish read built from three separate scores ----------
+
+// Technical (trend, momentum, RSI, MACD), fundamental (earnings growth, beats, revenue growth, analyst
+// ratings and targets) and news (headline tone). Each runs -100..+100; whatever is missing is left out
+// and the weights are rebalanced, so a stock with no analyst coverage is not penalized for it.
+function outlook({ fc, epsYoY, beatRate, revGrowth, analyst, last, sent }) {
+  const unit = x => clamp(x, -1, 1), parts = [];
+  if (epsYoY != null) parts.push(['Earnings growth', unit(epsYoY / 0.5), `EPS ${pct(epsYoY, 0)} year over year`]);
+  if (beatRate != null) parts.push(['Earnings beats', unit((beatRate - 0.5) * 2), `beat estimates in ${Math.round(beatRate * 100)}% of recent quarters`]);
+  if (revGrowth != null) parts.push(['Revenue growth', unit(revGrowth / 0.3), `revenue ${pct(revGrowth, 0)} year over year`]);
+  const votes = analyst ? analyst.buy + analyst.hold + analyst.sell : 0;
+  if (votes >= 3) parts.push(['Analyst ratings', unit((analyst.buy - analyst.sell) / votes), `${analyst.buy} buy, ${analyst.hold} hold, ${analyst.sell} sell`]);
+  if (analyst?.target && last) parts.push(['Analyst target', unit((analyst.target / last - 1) / 0.3), `average price target ${pct(analyst.target / last - 1, 0)} from here`]);
+  const technical = fc ? Math.round(100 * unit(fc.tech * 1.6)) : null;
+  const fundamental = parts.length ? Math.round(100 * mean(parts.map(p => p[1]))) : null;
+  const news = sent && sent.count >= 3 ? sent.score : null;
+  const W = [[technical, 0.45], [fundamental, 0.35], [news, 0.2]].filter(x => x[0] != null);
+  if (!W.length) return null;
+  const score = Math.round(W.reduce((s, [v, w]) => s + v * w, 0) / W.reduce((s, [, w]) => s + w, 0));
+  return {
+    score, label: score >= 40 ? 'Strongly bullish' : score >= 15 ? 'Bullish' : score <= -40 ? 'Strongly bearish' : score <= -15 ? 'Bearish' : 'Neutral',
+    technical, fundamental, news, parts: parts.map(([name, v, note]) => ({ name, v, note })),
+  };
+}
+
+// ---------- Price ranges with a stated confidence ----------
+
+// Width comes from the stock's own record: for each horizon, how far it actually moved relative to its
+// volatility at the time, at the 68th and 90th percentiles. So "90%" means a band this wide would have
+// held nine times in ten over the history we have. The center is nudged by the outlook score, and only
+// slightly: how far a stock can move is far easier to estimate than which way it will go.
+function ranges(bars, score = 0, horizons = [5, 21, 63]) {
+  if (!bars || bars.length < 260) return null;
+  const c = bars.map(b => b.c), n = c.length, last = c[n - 1], lr = c.map((x, i) => (i ? Math.log(x / c[i - 1]) : 0));
+  const vol = i => sd(lr.slice(i - 59, i + 1)) || 0.02, drift = mean(lr.slice(-250));
+  return horizons.map(h => {
+    const z = [];
+    for (let i = 60; i < n - h; i += Math.max(1, Math.floor(h / 5))) z.push(Math.abs(Math.log(c[i + h] / c[i])) / (vol(i) * Math.sqrt(h)));
+    z.sort((a, b) => a - b);
+    const q = p => (z.length >= 20 ? z[Math.min(z.length - 1, Math.floor(p * z.length))] : p > 0.8 ? 1.645 : 1);
+    const s = vol(n - 1) * Math.sqrt(h), mid = clamp(drift * h, -0.25 * s, 0.25 * s) + clamp(score / 100, -1, 1) * 0.3 * s;
+    const at = k => last * Math.exp(mid + k * s);
+    return { days: h, expected: at(0), lo68: at(-q(0.68)), hi68: at(q(0.68)), lo90: at(-q(0.9)), hi90: at(q(0.9)), samples: z.length };
+  });
+}
+
+module.exports = { iso, daysBetween, pct, clamp, ITEMS, isBiotech, quarterly, extractFacts, fundamentals, technicals, sentiment, earnings, merger, fda, eventRadar, forecast, bs, markOptions, outlook, ranges };

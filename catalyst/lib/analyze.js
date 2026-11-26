@@ -43,12 +43,14 @@ async function run(ticker) {
   const fda = S.fda({ sic: sub?.sic, mcap: fund?.mcap, trials, approvals, sent });
   const event = S.eventRadar({ filings, tech, earn, fdaRes: fda, sent });
 
+  const fc = S.forecast(bars, sent);
+  const outlook = S.outlook({ fc, epsYoY: earn.epsYoY, revGrowth: fund?.revGrowth ?? earn.revYoY, last: tech?.last, sent });
   const parts = [['M&A', ma.score], ['Earnings', earn.score], ['Event radar', event.score]].concat(fda.applicable ? [['FDA', fda.score]] : []).sort((a, b) => b[1] - a[1]);
   const evidence = [...ma.evidence, ...fda.evidence, ...earn.evidence, ...event.evidence];
 
   return {
     ticker, name: pretty(name), industry: sub?.industry || '', exchange: sub?.exchange || '', city: sub?.city || '', bio, asOf: Date.now(),
-    price: tech, fund, forecast: S.forecast(bars, sent),
+    price: tech, fund, forecast: fc, outlook, ranges: S.ranges(bars, outlook?.score || 0),
     chart: (bars || []).slice(-252).map(b => [b.d, +b.c.toFixed(2)]),
     markers: [...earn.history.map(h => ({ d: h.date, type: 'earn', label: `Earnings ${S.pct(h.move)}` })), ...ma.marks],
     scores: { overall: Math.round(0.65 * parts[0][1] + 0.35 * parts[1][1]), merger: ma.score, fda: fda.applicable ? fda.score : null, earnings: earn.score, event: event.score, sentiment: sent.score },
@@ -72,6 +74,7 @@ async function predict(symbol, exp) {
   const name = ent?.name || symbol, last = bars[bars.length - 1].c;
   const [newsItems, av] = await Promise.all([soft(src.news(symbol, name)), soft(src.avSentiment(symbol))]);
   const sent = S.sentiment(newsItems), fc = S.forecast(bars, sent, av), provider = src.optionsProvider();
+  const outlook = S.outlook({ fc, last, sent });
   let chain = null;
   if (provider && fc) {
     try {
@@ -83,7 +86,7 @@ async function predict(symbol, exp) {
     } catch (e) { chain = { provider, error: e.message }; }
   }
   return {
-    symbol, name: ent ? pretty(name) : symbol, price: last, chg1d: last / bars[bars.length - 2].c - 1, forecast: fc,
+    symbol, name: ent ? pretty(name) : symbol, price: last, chg1d: last / bars[bars.length - 2].c - 1, forecast: fc, outlook, ranges: S.ranges(bars, outlook?.score || 0),
     news: { score: sent.score, label: sent.label, count: sent.count, items: sent.items.slice(0, 6) }, chain, needsKey: !provider, warnings,
   };
 }
