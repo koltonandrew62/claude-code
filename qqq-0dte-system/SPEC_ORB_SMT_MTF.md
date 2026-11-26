@@ -5,11 +5,35 @@ All times are US/Eastern. Charts must show the **extended-hours session** (neede
 Symbol: QQQ. Comparison symbol for SMT: SPY (an input).
 Indicators used: PMH/PML, VWAP, the 15-minute opening range, ATR and RSI only. **No EMA of any kind** (the user removed it).
 
+## Session and time-zone rules (REQUIRED; the user asked for these explicitly)
+thinkorswim session functions (SecondsFromTime / SecondsTillTime) work in **US Eastern time**, and every time in this spec is
+Eastern. The Python data's time_et column is already Eastern (DST handled: EDT until 2026-10-30, EST from 2026-11-02).
+Never convert time zones in the studies, and never use the chart's display time zone.
+1. **Every daily value resets at the new day's first pre-market bar, not at midnight and not at the first bar of the chart.**
+   new day = (GetYYYYMMDD() != GetYYYYMMDD()[1]) OR (the bar starts at or after 04:00 and the previous bar started before 04:00
+   or after 16:00 on an earlier date). Reset on that bar: PMH/PML (QQQ and SPY), OR, VWAP sums, SMT state, break/REJECT state,
+   the 5-minute setup and trade state, and the rebuilt 15-minute bar state.
+2. **Yesterday's after-hours (16:00..20:00) must never feed today's values.** PMH/PML only take bars that start 04:00..09:29 on
+   **today's** date; the OR only 09:30..09:44 today; SMT/break/REJECT/entries only regular-session bars (09:30..15:59) today.
+   Post-market bars are ignored by every rule (they may only show the day's final lines).
+3. **No carry-over in plots**: until today's first pre-market bar has been seen, today's PMH/PML must not show yesterday's
+   values. Draw PMH/PML/OR/VWAP lines only on bars of the day they belong to (NaN elsewhere), so no line runs from yesterday into
+   today, and add an input to show past days.
+4. **VWAP resets at the regular-market open**: the cumulative sums start fresh on the 09:30 bar. Only 09:30..15:59 bars are
+   included; VWAP is NaN (not plotted, not used) before 09:30 and after 15:59, so pre-market and post-market volume never
+   enter it.
+5. Use SecondsFromTime(hhmm) >= 0 and SecondsTillTime(hhmm) > 0 windows on bar start times (bars are labeled by their start
+   on every timeframe). On the 15-minute chart the 09:30 bar covers 09:30..09:44 and is the whole OR; on the 5-minute chart the
+   OR is the 09:30, 09:35 and 09:40 bars.
+6. If no pre-market bar exists today (extended hours off), PMH/PML stay NaN, no SMT is computed, and a warning label says
+   "Turn on extended-hours trading session". Never fall back to yesterday's values.
+The Python reference must implement the same resets and windows, and the reviewers must check them line by line.
+
 ## Shared definitions
-- **Day reset**: when GetYYYYMMDD() changes.
-- **PMH / PML**: QQQ high / low of bars starting 04:00..09:29. **SPY PMH / PML** the same for SPY.
+- **Day reset**: see the session rules above (the first bar of the day's pre-market).
+- **PMH / PML**: QQQ high / low of today's bars starting 04:00..09:29. **SPY PMH / PML** the same for SPY.
 - **VWAP**: session VWAP from the 09:30 bar: cumulative sum((high+low+close)/3 × volume) / cumulative volume,
-  reset at the 09:30 bar. Not defined before 09:30.
+  reset at the 09:30 bar, regular-session bars only. Not defined before 09:30 or after 15:59.
 - **OR (15-minute opening range)**: ORH / ORL = high / low of the regular-session bars starting 09:30..09:44.
 - **ATR**: Wilder ATR(14) on the chart's own bars (extended-hours bars included, as thinkorswim computes it).
 - **RSI**: Wilder RSI(14) on the chart's own bars.
