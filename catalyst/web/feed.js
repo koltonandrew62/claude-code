@@ -70,7 +70,7 @@ async function logos(tickers) {
   const jetsOnly = process.argv.includes('--jets-only'), logosOnly = process.argv.includes('--logos-only');
   const tickers = [...new Set(Object.values(universes).flat())], out = {}, queue = jetsOnly || logosOnly ? [] : tickers.slice();
   fs.mkdirSync(OUT, { recursive: true });
-  if (!jetsOnly) console.log(`logos: ${await logos(tickers)}/${tickers.length}`);
+  if (!jetsOnly && !process.argv.includes('--no-logos')) console.log(`logos: ${await logos(tickers)}/${tickers.length}`); // logos rarely change: scheduled refreshes skip them
   if (logosOnly) process.exit(0);
   await Promise.all([1, 2, 3].map(async () => {
     while (queue.length) { const t = queue.shift(), r = await one(t); if (r) out[t] = r; process.stdout.write(`${r ? '.' : 'x'}`); }
