@@ -4,20 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Catalyst</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 /*CSS*/
 #banner{display:none;margin:0 0 16px;padding:12px 16px;border:1px solid var(--down);border-radius:12px;background:rgba(230,103,103,.1);color:var(--ink)}#banner.on{display:block}
 #live{margin-left:auto;color:var(--ink3);font-size:12px;display:flex;gap:8px;align-items:center}#live i{width:7px;height:7px;border-radius:50%;background:var(--ink3)}#live.ok i{background:var(--up)}#live.bad i{background:var(--down)}
+#v-screener.on>*{min-width:0}.fcell{white-space:nowrap}
 .fcell b{font-weight:600}.fcell i{font-style:normal}.fcell .u{color:var(--up)}.fcell .d{color:var(--down)}
 .about{color:var(--ink2);font-size:13px;line-height:1.55}
+.pulse{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}.pulse:empty{display:none}
+.pulse div{background:linear-gradient(180deg,#141418,#0c0c0f);border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-width:0}
+.pulse span{display:block;color:var(--ink3);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pulse b{display:block;font-size:19px;font-weight:650;letter-spacing:-.02em;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pulse em{font-style:normal;color:var(--ink2);font-size:12px;font-weight:400}
+.cow{display:flex;align-items:center;gap:10px}.av{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#000;font-style:normal}
+.av.logo{background:#fff;padding:4px;overflow:hidden}.av img{width:100%;height:100%;object-fit:contain;display:block}.av.lg{width:46px;height:46px;border-radius:12px;font-size:16px}.av.lg.logo{padding:6px}
+.pxc b{display:block;font-weight:600}.pxc span{font-size:12px}.spark{display:block;width:84px;height:26px;overflow:visible}
+tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
+.fresh{display:flex;gap:6px;font-size:12px;color:var(--ink3)}.fresh span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
+@media(max-width:1000px){.pulse{grid-template-columns:repeat(2,1fr)}.fresh{display:none}}
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="#2b2b33"/><circle cx="12" cy="12" r="6" stroke="#6c6c78"/><path d="M12 12 19.5 6" stroke="#c8ff3e" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#c8ff3e"/></svg>CATALYST</div>
   <form id="search"><input id="q" placeholder="Analyze any ticker…" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
-  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button></nav>
+  <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
   <div id="live"><i></i><span>Connecting…</span></div>
+  <div class="fresh" id="fresh"></div>
 </header>
 <main>
   <div id="banner"></div>
@@ -25,23 +38,28 @@
     <aside class="panel">
       <div class="ph"><h2>Screen</h2><button class="ghost" id="reset">Reset</button></div>
       <label class="f">Universe<select id="uni"></select></label>
-      <textarea id="custom" rows="2" placeholder="…or paste your own tickers: AAPL, VRTX, QQQ"></textarea>
+      <textarea id="custom" rows="2" placeholder="…or paste any US-listed tickers: AAPL, VRTX, QQQ"></textarea>
       <button class="primary" id="run">Run screen</button>
       <div class="chips" id="screens"></div>
       <div id="crit"></div>
     </aside>
     <div class="panel">
       <div class="ph"><h2 id="count">Results</h2></div>
+      <div class="pulse" id="pulse"></div>
       <div id="bar"><i></i></div>
       <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
     </div>
   </section>
   <section id="v-options" class="view"><div class="feed wide" id="options"></div></section>
   <section id="v-calendar" class="view"><div class="feed" id="calendar"></div></section>
+  <section id="v-signals" class="view"><div class="feed" id="signals"></div></section>
+  <section id="v-jets" class="view"><div id="map"></div><aside id="jetside"></aside></section>
 </main>
 <div id="scrim" data-close></div>
 <aside id="drawer" aria-label="Company detail"></aside>
 <div id="tip"></div>
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
 <script>
 const module = { exports: {} };
 (function (module) {
@@ -69,18 +87,54 @@ const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const chunk = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const DAY = 864e5, iso = SIG.iso, daysBetween = SIG.daysBetween;
-const CATS = { merger: ['M&A', 'var(--ma)'], earnings: ['Earnings', 'var(--earn)'], event: ['Event radar', 'var(--event)'] };
-const CAT_COLOR = { 'M&A': 'var(--ma)', Earnings: 'var(--earn)', Event: 'var(--event)' };
+const CATS = { merger: ['M&A', 'var(--ma)'], fda: ['FDA', 'var(--fda)'], earnings: ['Earnings', 'var(--earn)'], event: ['Event radar', 'var(--event)'] };
+const CAT_COLOR = { 'M&A': 'var(--ma)', FDA: 'var(--fda)', Earnings: 'var(--earn)', Event: 'var(--event)' };
 const CAPS = { micro: [0, 3e8], small: [3e8, 2e9], mid: [2e9, 1e10], large: [1e10, 2e11], mega: [2e11, Infinity] };
-const UNIVERSES = {
-  'Starter mix': ['AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMZN', 'META', 'VRTX', 'MRNA', 'SRPT', 'MDGL', 'AXSM', 'INSM', 'CRSP', 'VKTX', 'PFE', 'BMY', 'ETSY', 'PINS', 'SNAP', 'LYFT', 'CHWY', 'PTON', 'DOCU', 'M'],
-  'Mega caps': ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'JPM', 'LLY', 'V', 'UNH', 'XOM', 'WMT', 'MA', 'COST', 'NFLX', 'ORCL', 'AMD', 'CRM'],
-  'Biotech': ['VRTX', 'REGN', 'ALNY', 'BMRN', 'SRPT', 'IONS', 'MDGL', 'AXSM', 'INSM', 'CYTK', 'ARWR', 'CRSP', 'NTLA', 'BEAM', 'VKTX', 'RVMD', 'PTCT', 'ACAD', 'EXEL', 'HALO', 'NBIX', 'KRYS', 'APLS', 'MRNA'],
-  'Mid-cap M&A watch': ['ETSY', 'PINS', 'SNAP', 'DOCU', 'BOX', 'DBX', 'TWLO', 'OKTA', 'PTON', 'M', 'KSS', 'BBWI', 'CROX', 'YETI', 'HAS', 'MAT', 'U', 'PATH', 'FIVN', 'RNG', 'NTNX', 'AKAM', 'FFIV', 'LYFT', 'CHWY', 'W', 'ZM', 'TDOC'],
-  'ETFs': ['SPY', 'QQQ', 'IWM', 'DIA', 'XLF', 'XLE', 'XLK', 'XBI', 'SMH', 'ARKK', 'GLD', 'TLT'],
+const UNIVERSES = /*UNIVERSES*/;
+// Live scans run on Robinhood's scanner, which searches every US-listed stock; the top results are then analyzed here.
+const AVG50 = 'closeAvg(candleCount=50, candlePeriod="1d", session="all")', RELVOL = 'dayVolume / volumeAvg(candleCount=30, candlePeriod="1d", session="all")';
+const gt = (expression, v, display_title) => ({ expression, predicate: 'PREDICATE_GREATER_THAN', values: [String(v)], display_title });
+const yes = (expression, display_title) => ({ expression, predicate: '=', values: ['True'], display_title });
+const inIndex = code => ({ expression: 'symbol', predicate: 'PREDICATE_IN_LIST', values: [code] });
+const cap = v => gt('fundamental.marketCap', v, 'Market cap');
+const ymd = k => iso(Date.now() + k * 864e5).replace(/-/g, '');
+const SCANS = {
+  'All US stocks · unusual volume': { filters: () => [cap(1e9), gt(RELVOL, 2.5, 'Relative volume')], sort: 'Relative volume' },
+  'All US stocks · breaking out': { filters: () => [cap(1e9), yes(`tradeAllDay.price > 1.2 * ${AVG50}`, 'Breakout')], sort: 'Market cap' },
+  'All US stocks · beaten down': { filters: () => [cap(1e9), yes(`tradeAllDay.price < 0.8 * ${AVG50}`, 'Beaten down')], sort: 'Market cap' },
+  'All US stocks · earnings in 7 days': { filters: () => [cap(2e9), yes(`fundamental.earningsYmd >= ${ymd(0)}`, 'From'), yes(`fundamental.earningsYmd <= ${ymd(7)}`, 'To')], sort: 'Market cap' },
+  'All US stocks · 100 largest': { filters: () => [cap(1.2e11)], sort: 'Market cap' },
+  'S&P 500 · most active today': { filters: () => [inIndex('SP500'), cap(1), gt(RELVOL, 1.2, 'Relative volume')], sort: 'Relative volume' },
+  'Nasdaq 100': { filters: () => [inIndex('NDX'), cap(1)], sort: 'Market cap' },
+  'Dow 30': { filters: () => [inIndex('DJI'), cap(1)], sort: 'Market cap' },
+  'Mid caps (S&P 400) · unusual volume': { filters: () => [inIndex('SP400'), gt(RELVOL, 2, 'Relative volume')], sort: 'Relative volume' },
+  'Small caps (Russell 2000) · unusual volume': { filters: () => [inIndex('Russell2000'), gt(RELVOL, 3, 'Relative volume')], sort: 'Relative volume' },
 };
-const SCREENS = { 'Takeover radar': { merger: 20 }, 'Earnings soon': { earnDays: 14 }, 'Unusual activity': { event: 25 }, 'Forecast: up': { dir: 'up' }, 'Forecast: down': { dir: 'down' } };
-const S = { tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -1], watch: new Set(store('watch') || []), view: 'screener', gen: 0 };
+const NAMES = {};
+async function scan(name) {
+  const sc = SCANS[name], res = (await rh('preview_scan', { filters: sc.filters() }, 5 * 6e4)).result || {};
+  const rows = (res.results || []).filter(r => r.instrument_type === 'EQUITY' && /^[A-Z0-9.\-]{1,8}$/.test(String(r.ticker)));
+  rows.sort((a, b) => (num(b.columns?.[sc.sort]) ?? -Infinity) - (num(a.columns?.[sc.sort]) ?? -Infinity));
+  for (const r of rows) if (r.columns?.Name) NAMES[r.ticker] = String(r.columns.Name);
+  S.scanInfo = `${res.total_items > 200 ? 'more than 200' : rows.length} US stocks matched this scan · analyzing the top ${Math.min(rows.length, 100)}`;
+  return rows.slice(0, 100).map(r => r.ticker);
+}
+const SCREENS = { 'Takeover radar': { merger: 30 }, 'FDA catalysts': { fda: 45 }, 'Earnings soon': { earnDays: 14 }, 'Bullish news': { sent: 30 }, 'Unusual activity': { event: 25 }, 'Forecast: up': { dir: 'up' }, 'Forecast: down': { dir: 'down' } };
+const S = { tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -1], watch: new Set(store('watch') || []), view: 'screener', gen: 0, tape: 'All' };
+
+// ---------- Back-end snapshot: news sentiment, SEC-based M&A signals and FDA catalysts, published beside this page ----------
+let FEED = null, LOGOS = {};
+// A real logo where the back end has one, initials otherwise.
+const avatar = (t, cls = '') => (LOGOS[t] ? `<i class="av logo ${cls}"><img src="${esc(LOGOS[t])}" alt=""></i>` : `<i class="av ${cls}" style="background:hsl(${hue(t)} 72% 66%)">${esc(t.slice(0, 2))}</i>`);
+const feedReady = Promise.all([fetch('data/feed.json').then(r => (r.ok ? r.json() : null)).catch(() => null), fetch('data/logos.json').then(r => (r.ok ? r.json() : null)).catch(() => null)]).then(([d, logos]) => {
+  for (const [t, f] of Object.entries(logos || {})) if (/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+\/=]+$/.test(f)) LOGOS[t] = f;
+  if (d?.tickers) {
+    const today = iso(Date.now());
+    for (const t of Object.values(d.tickers)) for (const c of t.fda?.catalysts || []) c.days = daysBetween(today, c.date);
+    FEED = d;
+  }
+  $('#fresh').innerHTML = FEED ? `<span>News, filings & trials: ${esc(ago(+FEED.at))}</span>` : '<span>News & trial snapshot unavailable</span>';
+});
 const ok = () => S.tickers.map(t => S.res[t]).filter(r => r && !r.error);
 
 // ---------- Robinhood connector ----------
@@ -192,31 +246,33 @@ function earningsWeb(results, bars, tech, now = Date.now()) {
   };
 }
 
-// No news feed in the hosted edition, so the forecast runs on technicals alone.
-const forecastWeb = bars => { const fc = SIG.forecast(bars, null); if (fc) fc.factors = fc.factors.filter(f => f.name !== 'News sentiment'); return fc; };
+// News sentiment joins the forecast for tickers the back-end snapshot covers; others run on technicals alone.
+const forecastWeb = (bars, sent) => { const fc = SIG.forecast(bars, sent || null); if (fc && !sent) fc.factors = fc.factors.filter(f => f.name !== 'News sentiment'); return fc; };
 const companyName = (f, t) => (String(f?.description || '').match(/^(.{2,60}?)\s+(is|engages|operates|provides|designs|develops|manufactures|offers|owns|focuses|through|together)\b/) || [])[1]?.replace(/,$/, '') || t;
 
 function assemble(ticker, bars, fund, quote, earningsData, filingData) {
-  const tech = SIG.technicals(bars), last = quote?.last ?? tech?.last;
-  const filings = (filingData?.filings || []).map(f => ({ form: String(f.form_type || ''), date: String(f.date_filed || ''), items: '', file: '', desc: String(f.description || ''), url: f.cik && f.accession_number ? `https://www.sec.gov/Archives/edgar/data/${encodeURIComponent(f.cik)}/${encodeURIComponent(String(f.accession_number).replace(/-/g, ''))}/` : null }));
-  const fundLite = { mcap: num(fund?.market_cap), evSales: null };
+  const fd = FEED?.tickers?.[ticker], tech = SIG.technicals(bars), last = quote?.last ?? tech?.last, n = bars.length;
+  const rhFilings = (filingData?.filings || []).map(f => ({ form: String(f.form_type || ''), date: String(f.date_filed || ''), items: '', file: '', desc: String(f.description || ''), url: f.cik && f.accession_number ? `https://www.sec.gov/Archives/edgar/data/${encodeURIComponent(f.cik)}/${encodeURIComponent(String(f.accession_number).replace(/-/g, ''))}/` : null }));
+  const sent = fd?.news?.count ? fd.news : null;
   const earn = earningsWeb(earningsData?.results, bars, tech);
-  const ma = SIG.merger({ filings, tech, fund: fundLite, sent: null, fts: null, jetEvents: [] });
-  const event = SIG.eventRadar({ filings, tech, earn, fdaRes: null, sent: null });
-  const fc = forecastWeb(bars);
-  const parts = [['M&A', ma.score], ['Earnings', earn.score], ['Event radar', event.score]].sort((a, b) => b[1] - a[1]);
-  const evidence = [...ma.evidence, ...earn.evidence, ...event.evidence];
+  // M&A signals come from the back end's full SEC read where it covers the ticker; otherwise a lighter read of Robinhood's filing list.
+  const ma = fd?.merger || SIG.merger({ filings: rhFilings, tech, fund: { mcap: num(fund?.market_cap), evSales: null }, sent: null, fts: null, jetEvents: [] });
+  const fda = fd?.fda || { applicable: false, catalysts: [], evidence: [] };
+  const event = SIG.eventRadar({ filings: rhFilings, tech, earn, fdaRes: fda.applicable ? fda : null, sent });
+  const fc = forecastWeb(bars, sent);
+  const parts = [['M&A', ma.score], ['Earnings', earn.score], ['Event radar', event.score]].concat(fda.applicable ? [['FDA', fda.score]] : []).sort((a, b) => b[1] - a[1]);
+  const evidence = [...ma.evidence, ...fda.evidence, ...earn.evidence, ...event.evidence];
   return {
-    ticker, name: companyName(fund, ticker), industry: [fund?.sector, fund?.industry].filter(Boolean).join(' · '), city: [fund?.headquarters_city, fund?.headquarters_state].filter(Boolean).join(', '),
-    about: String(fund?.description || ''), asOf: Date.now(), full: !!(earningsData || filingData),
-    price: tech ? { ...tech, last, chg1d: quote?.chg ?? tech.chg1d } : null, forecast: fc,
+    ticker, name: fd?.name && fd.name !== ticker ? fd.name : NAMES[ticker] || companyName(fund, ticker), industry: [fund?.sector, fund?.industry].filter(Boolean).join(' · '), city: [fund?.headquarters_city, fund?.headquarters_state].filter(Boolean).join(', '),
+    about: String(fund?.description || ''), asOf: Date.now(), full: !!(earningsData || filingData), covered: !!fd, bio: !!fd?.bio,
+    price: tech ? { ...tech, last, chg1d: quote?.chg ?? tech.chg1d } : null, forecast: fc, trend: n > 60 ? bars[n - 1].c / bars[n - 61].c - 1 : null, spark: bars.slice(-60).map(b => b.c),
     fund: { mcap: num(fund?.market_cap), pe: num(fund?.pe_ratio), pb: num(fund?.pb_ratio), yield: num(fund?.dividend_yield), hi52: num(fund?.high_52_weeks), lo52: num(fund?.low_52_weeks), float: num(fund?.float) },
     chart: bars.slice(-252).map(b => [b.d, +b.c.toFixed(2)]),
-    markers: [...earn.history.map(h => ({ d: h.date, type: 'earn', label: `Earnings ${fPct(h.move)}` })), ...ma.marks],
-    scores: { overall: Math.round(0.65 * parts[0][1] + 0.35 * parts[1][1]), merger: ma.score, earnings: earn.score, event: event.score },
+    markers: [...earn.history.map(h => ({ d: h.date, type: 'earn', label: `Earnings ${fPct(h.move)}` })), ...(ma.marks || [])],
+    scores: { overall: Math.round(0.65 * parts[0][1] + 0.35 * parts[1][1]), merger: ma.score, fda: fda.applicable ? fda.score : null, earnings: earn.score, event: event.score, sentiment: sent ? sent.score : null },
     driver: parts[0][0], thesis: evidence.slice().sort((a, b) => b.w - a.w).slice(0, 4).map(e => ({ cat: e.cat, text: e.text })),
-    merger: ma, earnings: earn, event,
-    filings: filings.filter(f => !/^(3|4|5|144|13F|424B|S-8)/.test(f.form)).slice(0, 20),
+    merger: ma, fda, earnings: earn, event, news: sent,
+    filings: fd?.filings?.length ? fd.filings.map(x => ({ form: String(x.form), date: String(x.date), url: x.url, desc: String(x.label || '') })) : rhFilings.filter(f => !/^(3|4|5|144|13F|424B|S-8)/.test(f.form)).slice(0, 20),
   };
 }
 
@@ -225,7 +281,8 @@ const extras = t => Promise.all([rh('get_earnings_results', { symbol: t }, 30 * 
 
 async function run(list) {
   const gen = ++S.gen;
-  S.tickers = [...new Set(list)].slice(0, 60);
+  await feedReady;
+  S.tickers = [...new Set(list)].slice(0, 100);
   renderTable();
   const need = S.tickers.filter(t => !S.res[t] || S.res[t].error || !S.res[t].full); // also finish anything an interrupted run left half-loaded
   if (!need.length) return;
@@ -238,13 +295,14 @@ async function run(list) {
       while (queue.length && gen === S.gen) {
         const t = queue.shift(), [er, fl] = await extras(t);
         S.res[t] = assemble(t, bars[t], fund[t], quotes[t], er || {}, fl || {});
-        if (gen === S.gen) { renderTable(); if (S.view === 'calendar') renderCalendar(); }
+        if (gen === S.gen) { renderTable(); if (S.view === 'calendar') renderCalendar(); if (S.view === 'signals') renderSignals(); }
       }
     }));
   } catch (e) { const msg = report(e); for (const t of need) if (!S.res[t]) S.res[t] = { error: msg }; S.runError = msg; renderTable(); }
 }
 
 async function loadOne(t) {
+  await feedReady;
   try {
     const [bars, fund, quotes, [er, fl]] = await Promise.all([fetchBars([t]), fetchFund([t]), fetchQuotes([t]), extras(t)]);
     S.res[t] = bars[t]?.length > 30 ? assemble(t, bars[t], fund[t], quotes[t], er || {}, fl || {}) : { error: `No data found for ${t}` };
@@ -253,12 +311,14 @@ async function loadOne(t) {
 }
 
 // ---------- Screener ----------
-const COLS = [['ticker', 'Company', r => r.ticker], ['price', 'Price', r => r.price?.last, 1], ['chg', '1D', r => r.price?.chg1d, 1], ['overall', 'Catalyst', r => r.scores.overall], ['merger', 'M&A', r => r.scores.merger], ['earnings', 'Earnings', r => r.scores.earnings], ['event', 'Event', r => r.scores.event], ['fc', 'Forecast', r => r.forecast?.pUp], ['next', 'Next earnings', r => r.earnings.daysTo, 1], ['mcap', 'Mkt cap', r => r.fund?.mcap, 1]];
-const SLIDERS = [['overall', 'Catalyst score', 'var(--accent)'], ['merger', 'M&A signal', 'var(--ma)'], ['earnings', 'Earnings setup', 'var(--earn)'], ['event', 'Event radar', 'var(--event)']];
+const COLS = [['ticker', 'Company', r => r.ticker], ['price', 'Price', r => r.price?.last, 1], ['trend', '60 days', r => r.trend], ['overall', 'Catalyst', r => r.scores.overall], ['merger', 'M&A', r => r.scores.merger], ['fda', 'FDA', r => r.scores.fda], ['earnings', 'Earnings', r => r.scores.earnings], ['event', 'Event', r => r.scores.event], ['sentiment', 'News', r => r.scores.sentiment], ['fc', 'Forecast', r => r.forecast?.pUp], ['next', 'Next earnings', r => r.earnings.daysTo, 1]];
+const SLIDERS = [['overall', 'Catalyst score', 'var(--accent)'], ['merger', 'M&A signal', 'var(--ma)'], ['fda', 'FDA catalyst', 'var(--fda)'], ['earnings', 'Earnings setup', 'var(--earn)'], ['event', 'Event radar', 'var(--event)']];
 
 function passes(r) {
   const c = S.crit, s = r.scores;
-  for (const [k] of SLIDERS) if (c[k] && s[k] < c[k]) return false;
+  for (const [k] of SLIDERS) if (c[k] && (s[k] ?? -1) < c[k]) return false;
+  if (c.sent != null && (s.sentiment ?? -101) < c.sent) return false;
+  if (c.bio && !r.bio) return false;
   if (c.dir && !(c.dir === 'up' ? r.forecast?.verdict === 'Up' : r.forecast?.verdict === 'Down')) return false;
   if (c.earnDays && !(r.earnings.daysTo != null && r.earnings.daysTo <= c.earnDays)) return false;
   if (c.cap) { const m = r.fund?.mcap, [lo, hi] = CAPS[c.cap]; if (m == null || m < lo || m >= hi) return false; }
@@ -272,11 +332,13 @@ function renderCrit() {
   const c = S.crit;
   const sel = (k, label, opts) => `<label class="f">${label}<select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(c[k] ?? '') === String(v) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
   $('#crit').innerHTML = SLIDERS.map(([k, n, col]) => `<label class="sl"><span><i style="background:${col}"></i>${n}</span><output>${c[k] ? '≥ ' + c[k] : 'Any'}</output><input type="range" min="0" max="100" step="5" value="${c[k] || 0}" data-k="${k}"></label>`).join('')
+    + `<label class="sl"><span>News sentiment</span><output>${c.sent != null ? '≥ ' + c.sent : 'Any'}</output><input type="range" min="-100" max="100" step="10" value="${c.sent ?? -100}" data-k="sent"></label>`
     + sel('dir', 'Price forecast', [['', 'Any'], ['up', 'Leaning up'], ['down', 'Leaning down']])
     + sel('earnDays', 'Earnings within', [['', 'Any time'], [7, '7 days'], [14, '14 days'], [30, '30 days'], [60, '60 days']])
     + sel('cap', 'Market cap', [['', 'Any size'], ['micro', 'Micro · under $300M'], ['small', 'Small · $300M–2B'], ['mid', 'Mid · $2B–10B'], ['large', 'Large · $10B–200B'], ['mega', 'Mega · over $200B']])
     + sel('vol', 'Volume vs normal', [['', 'Any'], [1.2, 'At least 1.2x'], [1.5, 'At least 1.5x'], [2, 'At least 2x']])
     + `<label class="f">Minimum price<input type="number" min="0" step="1" placeholder="$ any" value="${c.price || ''}" data-k="price"></label>`
+    + `<label class="tog">Biotech & pharma only<input type="checkbox" data-k="bio"${c.bio ? ' checked' : ''}><b></b></label>`
     + `<label class="tog">Watchlist only<input type="checkbox" data-k="starred"${c.starred ? ' checked' : ''}><b></b></label>`;
   const cur = JSON.stringify(c);
   $('#screens').innerHTML = Object.keys(SCREENS).map(n => `<button class="chip${JSON.stringify(SCREENS[n]) === cur ? ' on' : ''}" data-screen="${esc(n)}">${esc(n)}</button>`).join('');
@@ -286,7 +348,7 @@ $('#crit').addEventListener('input', e => {
   const el = e.target, k = el.dataset.k, c = S.crit;
   if (!k) return;
   if (el.type === 'checkbox') el.checked ? (c[k] = true) : delete c[k];
-  else if (el.value === '' || (el.type === 'range' && +el.value === 0)) delete c[k];
+  else if (el.value === '' || (el.type === 'range' && +el.value === +el.min)) delete c[k];
   else c[k] = k === 'cap' || k === 'dir' ? el.value : +el.value;
   if (el.type === 'range') el.previousElementSibling.textContent = c[k] != null ? '≥ ' + c[k] : 'Any';
   store('crit', c); renderTable();
@@ -296,26 +358,47 @@ $('#crit').addEventListener('input', e => {
 
 const scoreCell = (v, col, big) => (v == null ? '<td class="sc sub">—</td>' : `<td class="sc${big ? ' big' : ''}"><b>${v}</b><i style="--v:${v}%;--c:${col}"></i></td>`);
 const fcCell = fc => (!fc ? '<td class="sub">—</td>' : `<td class="fcell"><i class="${fc.verdict === 'Up' ? 'u' : fc.verdict === 'Down' ? 'd' : ''}">${fc.verdict === 'Up' ? '▲' : fc.verdict === 'Down' ? '▼' : '◆'}</i> <b>${Math.round(fc.pUp * 100)}%</b> <span class="sub">up</span></td>`);
+const hue = t => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+function spark(r) {
+  const a = r.spark;
+  if (!a || a.length < 10) return '<td class="sub">—</td>';
+  const lo = Math.min(...a), hi = Math.max(...a), x = i => 2 + (i / (a.length - 1)) * 78, y = v => 23 - ((v - lo) / (hi - lo || 1)) * 20, col = r.trend >= 0 ? 'var(--up)' : 'var(--down)';
+  return `<td data-tip="60-day change ${fPct(r.trend)}"><svg class="spark" viewBox="0 0 84 26"><path d="${a.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('')}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${x(a.length - 1)}" cy="${y(a[a.length - 1])}" r="2.5" fill="${col}"/></svg></td>`;
+}
+
+function renderPulse(rs) {
+  if (!rs.length) { $('#pulse').innerHTML = ''; return; }
+  const top = rs.slice().sort((a, b) => b.scores.overall - a.scores.overall)[0], withNews = rs.filter(r => r.scores.sentiment != null);
+  const mood = withNews.length ? Math.round(mean(withNews.map(r => r.scores.sentiment))) : null;
+  const tile = (label, value) => `<div><span>${label}</span><b>${value}</b></div>`;
+  $('#pulse').innerHTML = tile('Top catalyst', `${esc(top.ticker)} <em>${top.scores.overall} · ${esc(top.driver)}</em>`)
+    + tile('Earnings within 14 days', rs.filter(r => r.earnings.daysTo != null && r.earnings.daysTo <= 14).length)
+    + tile('5-day forecast', `▲ ${rs.filter(r => r.forecast?.verdict === 'Up').length} <em>up</em> · ▼ ${rs.filter(r => r.forecast?.verdict === 'Down').length} <em>down</em>`)
+    + tile('News mood', mood == null ? '—' : `${mood > 0 ? '+' : ''}${mood} <em>${mood > 20 ? 'positive' : mood < -20 ? 'negative' : 'neutral'}</em>`)
+    + tile('On the radar', `${rs.filter(r => r.fda.applicable && r.fda.catalysts.some(c => c.days >= 0 && c.days <= 90)).length} <em>FDA in 90d</em> · ${rs.filter(r => r.merger.pending).length} <em>deals</em>`);
+}
 
 function renderTable() {
   const [key, dir] = S.sort, get = COLS.find(c => c[0] === key)[2];
-  const rows = ok().filter(passes).sort((a, b) => { const x = get(a), y = get(b); return x == null ? 1 : y == null ? -1 : (x < y ? -1 : x > y ? 1 : 0) * dir; });
-  const pending = S.tickers.filter(t => !S.res[t]).length, failed = S.tickers.filter(t => S.res[t]?.error).length, partial = ok().filter(r => !r.full).length;
+  const all = ok(), rows = all.filter(passes).sort((a, b) => { const x = get(a), y = get(b); return x == null ? 1 : y == null ? -1 : (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  const pending = S.tickers.filter(t => !S.res[t]).length, failed = S.tickers.filter(t => S.res[t]?.error).length, partial = all.filter(r => !r.full).length;
   $('#thead').innerHTML = '<tr><th></th>' + COLS.map(([k, n, , right]) => `<th data-sort="${k}" class="${right ? 'num ' : ''}${k === key ? 'on' : ''}">${n}${k === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('') + '<th>Top signal</th></tr>';
   $('#tbody').innerHTML = rows.map(r => {
     const p = r.price, s = r.scores, e = r.earnings;
     return `<tr data-open="${esc(r.ticker)}"><td><button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></td>
-      <td class="co"><b>${esc(r.ticker)}</b><span>${esc(r.name)}</span></td>
-      <td class="num">${p ? '$' + p.last.toFixed(2) : '—'}</td><td class="num ${p?.chg1d >= 0 ? 'up' : 'dn'}">${p ? fPct(p.chg1d) : '—'}</td>
-      ${scoreCell(s.overall, 'var(--accent)', 1)}${scoreCell(s.merger, 'var(--ma)')}${scoreCell(s.earnings, 'var(--earn)')}${scoreCell(s.event, 'var(--event)')}${fcCell(r.forecast)}
-      <td class="num">${e.nextDate ? `${fDate(e.nextDate)} <span class="sub">· ${e.daysTo}d</span>` : '—'}</td><td class="num">${fMoney(r.fund?.mcap)}</td>
+      <td><div class="cow">${avatar(r.ticker)}<div class="co"><b>${esc(r.ticker)}</b><span>${esc(r.name)}</span></div></div></td>
+      <td class="num pxc">${p ? `<b>$${p.last.toFixed(2)}</b><span class="${p.chg1d >= 0 ? 'up' : 'dn'}">${fPct(p.chg1d)}</span>` : '—'}</td>${spark(r)}
+      ${scoreCell(s.overall, 'var(--accent)', 1)}${scoreCell(s.merger, 'var(--ma)')}${scoreCell(s.fda, 'var(--fda)')}${scoreCell(s.earnings, 'var(--earn)')}${scoreCell(s.event, 'var(--event)')}
+      ${s.sentiment == null ? '<td class="sc sub">—</td>' : `<td class="sc"><b>${s.sentiment > 0 ? '+' : ''}${s.sentiment}</b>${sentBar(s.sentiment)}</td>`}${fcCell(r.forecast)}
+      <td class="num">${e.nextDate ? `${fDate(e.nextDate)} <span class="sub">· ${e.daysTo}d</span>` : '—'}</td>
       <td class="why" title="${esc(r.thesis[0]?.text || '')}">${esc(r.thesis[0]?.text || '—')}</td></tr>`;
-  }).join('') + Array(Math.min(pending, 6)).fill('<tr class="sk"><td colspan="12"><span></span></td></tr>').join('')
-    || `<tr><td colspan="12" class="empty">${S.runError ? esc(S.runError) : S.tickers.length ? 'Nothing matches these criteria. Loosen a filter or hit Reset.' : 'Pick a universe and run a screen.'}</td></tr>`;
-  $('#count').innerHTML = `${rows.length} match${rows.length === 1 ? '' : 'es'} <span class="sub">of ${S.tickers.length} screened${pending ? ` · loading ${pending}` : partial ? ` · adding earnings and filings for ${partial}` : ''}${failed ? ` · ${failed} unavailable` : ''}</span>`;
-  const total = S.tickers.length * 2 || 1, done = (S.tickers.length - pending) + (ok().length - partial) + failed;
+  }).join('') + Array(Math.min(pending, 6)).fill('<tr class="sk"><td colspan="13"><span></span></td></tr>').join('')
+    || `<tr><td colspan="13" class="empty">${S.runError ? esc(S.runError) : S.tickers.length ? 'Nothing matches these criteria. Loosen a filter or hit Reset.' : 'Pick a universe and run a screen.'}</td></tr>`;
+  $('#count').innerHTML = `${rows.length} match${rows.length === 1 ? '' : 'es'} <span class="sub">of ${S.tickers.length} screened${S.scanInfo ? ' · ' + esc(S.scanInfo) : ''}${pending ? ` · loading ${pending}` : partial ? ` · adding earnings for ${partial}` : ''}${failed ? ` · ${failed} unavailable` : ''}</span>`;
+  const total = S.tickers.length * 2 || 1, done = (S.tickers.length - pending) + (all.length - partial) + failed;
   $('#bar i').style.width = Math.min(100, (100 * done) / total) + '%';
   $('#bar').style.opacity = pending || partial ? 1 : 0;
+  renderPulse(all);
 }
 
 /*SHARED*/
@@ -325,13 +408,14 @@ const evi = list => (list.length ? `<ul class="evi">${list.map(e => `<li><span c
 
 function renderDetail(r) {
   const p = r.price, f = r.fund, e = r.earnings, s = r.scores;
-  const tile = k => { const [n, col] = CATS[k]; return `<div class="tile"><span class="lab"><i style="background:${col}"></i>${n}</span><b>${s[k]}</b><em>${esc(k === 'earnings' ? e.leanLabel : r[k].level)}</em><div class="meter"><i style="width:${s[k]}%;background:${col}"></i></div></div>`; };
+  const tile = k => { const [n, col] = CATS[k], v = s[k]; return `<div class="tile"><span class="lab"><i style="background:${col}"></i>${n}</span><b>${v ?? '—'}</b><em>${esc(v == null ? (r.covered ? 'Not a drug developer' : 'Not in the snapshot') : k === 'earnings' ? e.leanLabel : r[k].level)}</em><div class="meter"><i style="width:${v || 0}%;background:${col}"></i></div></div>`; };
+  const nw = r.news;
   const stat = (n, v) => `<div><span>${n}</span><b>${v}</b></div>`, fc = r.forecast;
   $('#drawer').innerHTML = `
-  <div class="dh"><div><div class="tk">${esc(r.ticker)}<button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></div><div class="nm">${esc(r.name)}</div><div class="sub">${esc([r.industry, r.city].filter(Boolean).join(' · '))}</div></div>
+  <div class="dh">${avatar(r.ticker, 'lg')}<div><div class="tk">${esc(r.ticker)}<button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></div><div class="nm">${esc(r.name)}</div><div class="sub">${esc([r.industry, r.city].filter(Boolean).join(' · '))}</div></div>
     <div class="px">${p ? `<b>$${p.last.toFixed(2)}</b><span class="${p.chg1d >= 0 ? 'up' : 'dn'}">${fPct(p.chg1d, 2)} today</span>` : ''}</div><button class="x" data-close aria-label="Close">✕</button></div>
   <div class="card hero">${ring(s.overall)}<div><div class="eyebrow">Catalyst score · led by ${esc(r.driver)}</div><ul class="thesis">${r.thesis.map(t => `<li><i style="background:${CAT_COLOR[t.cat]}"></i><span>${esc(t.text)}</span></li>`).join('') || '<li>No notable signals right now.</li>'}</ul></div></div>
-  <div class="tiles" style="grid-template-columns:repeat(4,1fr)">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">Price forecast</span><b>${fc ? Math.round(fc.pUp * 100) + '%' : '—'}</b><em>${fc ? (fc.verdict === 'No clear edge' ? 'No clear edge' : 'Leaning ' + fc.verdict.toLowerCase()) + ' · chance up' : 'Too little history'}</em>${fc ? sentBar(Math.round((fc.pUp - 0.5) * 200)) : ''}</div></div>
+  <div class="tiles" style="grid-template-columns:repeat(3,1fr)">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">News sentiment</span><b>${nw ? (nw.score > 0 ? '+' : '') + nw.score : '—'}</b><em>${nw ? esc(nw.label) + ' · ' + nw.count + ' headlines' : 'Not in the snapshot'}</em>${nw ? sentBar(nw.score) : '<div class="meter"></div>'}</div><div class="tile"><span class="lab">Price forecast</span><b>${fc ? Math.round(fc.pUp * 100) + '%' : '—'}</b><em>${fc ? (fc.verdict === 'No clear edge' ? 'No clear edge' : 'Leaning ' + fc.verdict.toLowerCase()) + ' · chance up' : 'Too little history'}</em>${fc ? sentBar(Math.round((fc.pUp - 0.5) * 200)) : ''}</div></div>
   <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:rgba(255,255,255,.25);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
   ${forecastCard(fc)}
   <div class="card"><h3>Key numbers</h3><div class="stats">${stat('Market cap', fMoney(f.mcap))}${stat('P/E ratio', f.pe != null ? f.pe.toFixed(1) : '—')}${stat('Price / book', f.pb != null ? f.pb.toFixed(1) : '—')}${stat('Dividend yield', f.yield != null ? f.yield.toFixed(2) + '%' : '—')}${stat('52-week high', f.hi52 != null ? '$' + f.hi52.toFixed(2) : '—')}${stat('52-week low', f.lo52 != null ? '$' + f.lo52.toFixed(2) : '—')}${stat('52-week range', p?.pos52 != null ? Math.round(p.pos52 * 100) + '% of the way up' : '—')}${stat('Volume vs normal', p?.volRatio ? p.volRatio.toFixed(2) + 'x' : '—')}</div></div>
@@ -339,10 +423,16 @@ function renderDetail(r) {
     <div class="stats" style="margin-bottom:16px">${stat(e.dateConfirmed ? 'Next report (confirmed)' : 'Next report (tentative)', e.nextDate ? fDate(e.nextDate, 1) : '—')}${stat('Typical move', e.expectedMove ? '±' + (e.expectedMove * 100).toFixed(1) + '%' : '—')}${stat('Analyst EPS estimate', e.epsForecast != null ? '$' + e.epsForecast.toFixed(2) : '—')}${stat('In', e.daysTo != null ? e.daysTo + ' days' : '—')}</div>
     <div class="grid2"><div><div class="sub" style="margin-bottom:6px">Stock reaction to past reports</div>${reactionBars(e.history)}</div><div><div class="sub" style="margin-bottom:6px">Reported EPS, with the analyst estimate for next quarter</div>${epsBars(e)}</div></div>${evi(e.evidence)}</div>
   <div class="card"><h3><span><i class="dot" style="background:var(--ma)"></i>M&A signals</span><span class="tag">${esc(r.merger.level)}</span></h3>${evi(r.merger.evidence)}</div>
+  ${r.fda.applicable ? `<div class="card"><h3><span><i class="dot" style="background:var(--fda)"></i>FDA & trial catalysts</span><span class="tag">${esc(r.fda.level)}</span></h3>
+    ${r.fda.catalysts.length ? `<div style="overflow-x:auto"><table class="fdat"><thead><tr><th>Program</th><th>Stage</th><th>Date</th><th>Approval odds</th></tr></thead><tbody>${r.fda.catalysts.map(c => `<tr><td><a href="${href(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a><div class="sub">${esc(c.kind)}</div></td><td>${c.phase === 'filed' ? 'FDA review' : 'Phase ' + esc(c.phase)}</td><td style="white-space:nowrap">${fDate(String(c.date), 1)}<div class="sub">${c.days < 0 ? 'data due' : (c.estimated ? 'est. · ' : '') + 'in ' + c.days + 'd'}</div></td><td><div class="odds"><span>${Math.round(c.odds * 100)}%</span><div class="meter"><i style="width:${Math.round(c.odds * 100)}%;background:var(--fda)"></i></div></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No late-stage readouts in the next 12 months.</div>'}
+    ${evi(r.fda.evidence.slice(1))}<div class="note">Approval odds are historical base rates by phase and disease area (BIO/QLS 2011–2020), adjusted for the sponsor's track record. They are a starting point, not a forecast of this specific drug.</div></div>` : ''}
   <div class="card"><h3><span><i class="dot" style="background:var(--event)"></i>Event radar</span><span class="tag">${esc(r.event.level)}</span></h3>${evi(r.event.evidence)}</div>
+  ${nw ? `<div class="card"><h3>News sentiment <span class="tag">${esc(nw.label)}</span></h3>
+    <div class="stack"><i style="flex:${+nw.pos};background:var(--up)"></i><i style="flex:${+nw.neu};background:#3a3a44"></i><i style="flex:${+nw.neg};background:var(--down)"></i></div><div class="key"><span><i style="background:var(--up)"></i>${+nw.pos} positive</span><span><i style="background:#3a3a44"></i>${+nw.neu} neutral</span><span><i style="background:var(--down)"></i>${+nw.neg} negative</span>${nw.buzz ? `<span>News pace ${(+nw.buzz).toFixed(1)}x normal</span>` : ''}</div>
+    <div style="margin-top:12px">${nw.items.map(n => `<div class="nw"><i class="dot" style="background:${n.s > 0 ? 'var(--up)' : n.s < 0 ? 'var(--down)' : '#3a3a44'}"></i><div><a href="${href(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a><div class="m"><span>${esc(n.publisher)} · ${esc(ago(+n.time))}</span>${(n.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></div></div>`).join('')}</div></div>` : ''}
   ${r.about ? `<div class="card"><h3>About</h3><div class="about">${esc(r.about)}</div></div>` : ''}
   <div class="card"><h3>Recent SEC filings</h3>${r.filings.map(x => `<div class="fil"><span>${fDate(x.date, 1)}</span><a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.form)} ↗</a><span>${esc(x.desc)}</span></div>`).join('') || '<div class="empty">No filings found.</div>'}</div>
-  <div class="note">Scores are rule-based signals built from market data, not investment advice. Data from your Robinhood connection · updated ${ago(r.asOf)}.</div>`;
+  <div class="note">Scores are rule-based signals built from market data, not investment advice. Prices, earnings and options are live from your Robinhood connection (updated ${ago(r.asOf)}). ${r.covered ? 'News, SEC-based M&A signals and FDA catalysts come from a snapshot taken ' + esc(ago(+FEED.at)) + '.' : 'This ticker is outside the news and FDA snapshot, so those sections are not shown.'}</div>`;
   bindChart(r);
 }
 
@@ -388,7 +478,7 @@ function renderOptions() {
   $('#options').innerHTML = `<form id="optform"><input name="symbol" placeholder="Symbol, e.g. QQQ" value="${esc(o.symbol || '')}" autocomplete="off" spellcheck="false" required><button type="submit">Predict</button>${['QQQ', 'SPY', 'NVDA', 'AAPL', 'TSLA', 'AMD'].map(s => `<button type="button" class="chip" data-optsym="${s}">${s}</button>`).join('')}</form>`
     + (o.error ? `<div class="empty">${esc(o.error)}.</div>`
       : !d ? (o.loading ? `<div class="empty">Running the forecast for ${esc(o.symbol)}…</div>` : '<div class="empty">Pick any stock or ETF. You get an up / down forecast for the price, and every option strike marked green or red.</div>')
-      : `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div><div style="font-size:24px;font-weight:700">${esc(d.symbol)}</div><div class="sub">${esc(d.name)}</div></div><div style="text-align:right"><b style="font-size:22px">$${d.price.toFixed(2)}</b><div class="${d.chg1d >= 0 ? 'up' : 'dn'}">${fPct(d.chg1d, 2)} today</div></div></div>`
+      : `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div class="cow" style="gap:14px">${avatar(d.symbol, 'lg')}<div><div style="font-size:24px;font-weight:700">${esc(d.symbol)}</div><div class="sub">${esc(d.name)}</div></div></div><div style="text-align:right"><b style="font-size:22px">$${d.price.toFixed(2)}</b><div class="${d.chg1d >= 0 ? 'up' : 'dn'}">${fPct(d.chg1d, 2)} today</div></div></div>`
         + (forecastCard(d.forecast, 'Price forecast') || '<div class="card"><div class="empty">This symbol needs about a year of price history before a forecast can be made.</div></div>')
         + (d.chain ? chainCard(d) : `<div class="card"><h3>Option chain</h3><div class="empty">${esc(o.progress || 'Loading the option chain…')}</div></div>`));
   const w = $('.chainwrap'), s = $('.chain .spot');
@@ -407,7 +497,7 @@ async function loadOptions(symbol, exp) {
       const [bars, quotes, fund] = await Promise.all([fetchBars([symbol]), fetchQuotes([symbol]), fetchFund([symbol]).catch(() => ({}))]);
       if (!(bars[symbol]?.length > 1)) throw { code: 'no_prices' };
       const b = bars[symbol], last = quotes[symbol]?.last ?? b[b.length - 1].c;
-      const fc = forecastWeb(b);
+      const fc = forecastWeb(b, FEED?.tickers?.[symbol]?.news?.count ? FEED.tickers[symbol].news : null);
       if (fc) { fc.low *= last / fc.last; fc.high *= last / fc.last; fc.last = last; }
       base = { symbol, name: companyName(fund[symbol], symbol), price: last, chg1d: quotes[symbol]?.chg ?? last / b[b.length - 2].c - 1, forecast: fc };
     }
@@ -428,12 +518,78 @@ async function loadOptions(symbol, exp) {
 
 // ---------- Calendar ----------
 function renderCalendar() {
-  const ev = ok().filter(r => r.earnings.nextDate).map(r => ({ d: r.earnings.nextDate, days: r.earnings.daysTo, t: r.ticker, text: `Earnings${r.earnings.dateConfirmed ? '' : ' (tentative date)'}${r.earnings.expectedMove ? ` · typical move ±${(r.earnings.expectedMove * 100).toFixed(1)}%` : ''}${r.earnings.epsForecast != null ? ` · EPS estimate $${r.earnings.epsForecast.toFixed(2)}` : ''} · ${r.earnings.leanLabel.toLowerCase()}` })).sort((a, b) => (a.d < b.d ? -1 : 1));
+  const ev = ok().filter(r => r.earnings.nextDate).map(r => ({ d: r.earnings.nextDate, days: r.earnings.daysTo, t: r.ticker, text: `Earnings${r.earnings.dateConfirmed ? '' : ' (tentative date)'}${r.earnings.expectedMove ? ` · typical move ±${(r.earnings.expectedMove * 100).toFixed(1)}%` : ''}${r.earnings.epsForecast != null ? ` · EPS estimate $${r.earnings.epsForecast.toFixed(2)}` : ''} · ${r.earnings.leanLabel.toLowerCase()}` }));
+  for (const r of ok()) for (const c of r.fda.catalysts || []) if (c.days >= 0) ev.push({ d: String(c.date), days: c.days, t: r.ticker, cat: 'FDA', text: `${c.kind}: ${c.label} · ${c.phase === 'filed' ? 'under FDA review' : 'Phase ' + c.phase} · approval odds about ${Math.round(c.odds * 100)}%` });
+  ev.sort((a, b) => (a.d < b.d ? -1 : 1));
   let lo = -1;
   $('#calendar').innerHTML = ev.length ? [['This week', 7], ['Next 30 days', 30], ['Next 90 days', 90], ['Later', 1e9]].map(([name, hi]) => {
     const g = ev.filter(x => x.days > lo && x.days <= hi); lo = hi;
-    return g.length ? `<h2>${name}</h2><div class="card">${g.map(x => `<div class="row"><span class="d">${fDate(x.d)} · ${x.days}d</span><b class="t" data-open="${esc(x.t)}">${esc(x.t)}</b><span><span class="tag"><i class="dot" style="background:var(--earn)"></i>Earnings</span></span><span class="x">${esc(x.text)}</span></div>`).join('')}</div>` : '';
+    return g.length ? `<h2>${name}</h2><div class="card">${g.map(x => `<div class="row"><span class="d">${fDate(x.d)} · ${x.days}d</span><b class="t" data-open="${esc(x.t)}">${esc(x.t)}</b><span><span class="tag"><i class="dot" style="background:${x.cat === 'FDA' ? 'var(--fda)' : 'var(--earn)'}"></i>${x.cat === 'FDA' ? 'FDA' : 'Earnings'}</span></span><span class="x">${esc(x.text)}</span></div>`).join('')}</div>` : '';
   }).join('') : '<div class="empty">Run a screen first — upcoming earnings for those companies are laid out here.</div>';
+}
+
+// ---------- Signal tape ----------
+function renderSignals() {
+  const rows = [];
+  for (const r of ok()) for (const k of Object.keys(CATS)) for (const e of r[k].evidence || []) if (e.date) rows.push({ ...e, t: r.ticker });
+  rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.w - a.w));
+  const shown = rows.filter(x => S.tape === 'All' || x.cat === S.tape).slice(0, 150);
+  $('#signals').innerHTML = `<div class="chips" style="margin:4px">${['All', 'M&A', 'FDA', 'Earnings', 'Event'].map(c => `<button class="chip${S.tape === c ? ' on' : ''}" data-tape="${c}">${c}</button>`).join('')}</div>`
+    + (shown.length ? `<div class="card">${shown.map(x => `<div class="row"><span class="d">${fDate(String(x.date))}</span><b class="t" data-open="${esc(x.t)}">${esc(x.t)}</b><span><span class="tag"><i class="dot" style="background:${CAT_COLOR[x.cat] || '#666'}"></i>${esc(x.cat)}</span></span><span class="x">${x.url ? `<a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.text)} ↗</a>` : esc(x.text)}</span></div>`).join('')}</div>` : '<div class="empty">Run a screen first — dated signals from every company you screen stream in here, newest first.</div>');
+}
+
+// ---------- Jet tracker (aircraft snapshot from the back end) ----------
+let map, jetLayer, hqLayer, JETS;
+const plane = (track, tagged) => L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: `<svg class="pl ${tagged ? 'tagd' : 'near'}" viewBox="0 0 24 24" style="transform:rotate(${+track || 0}deg)"><path d="M12 1.5c.9 0 1.5 1.2 1.5 3v4.6l8 4.9v2.2l-8-2.4v4.4l2.4 1.8V22L12 20.9 8.1 22v-2l2.4-1.8v-4.4l-8 2.4V14l8-4.9V4.5c0-1.8.6-3 1.5-3z"/></svg>` });
+const faa = reg => (/^N[0-9][A-Z0-9]{1,5}$/.test(reg) ? `<a href="https://registry.faa.gov/AircraftInquiry/Search/NNumberResult?nNumberTxt=${encodeURIComponent(reg)}" target="_blank" rel="noopener">Look up owner ↗</a>` : '');
+const fleet = () => store('fleet') || {};
+
+function initMap() {
+  map = L.map('map', { preferCanvas: true, zoomSnap: 0.5, minZoom: 2, maxZoom: 11, maxBounds: [[-85, -190], [85, 190]] }).setView([39, -96], 4.5);
+  map.attributionControl.addAttribution('Map: Natural Earth, US Census · Aircraft: adsb.lol');
+  map.createPane('base').style.zIndex = 250;
+  const base = L.canvas({ pane: 'base' });
+  Promise.all(['countries-110m', 'states-10m'].map(f => fetch(`vendor/${f}.json`).then(r => r.json()))).then(([world, us]) => {
+    L.geoJSON(topojson.feature(world, world.objects.countries), { pane: 'base', renderer: base, interactive: false, style: { color: '#2e2e37', weight: 1, fillColor: '#0e0e12', fillOpacity: 1 } }).addTo(map);
+    L.geoJSON(topojson.mesh(us, us.objects.states, (a, b) => a !== b), { pane: 'base', renderer: base, interactive: false, style: { color: '#26262e', weight: 1, fill: false } }).addTo(map);
+  }).catch(() => {});
+  jetLayer = L.layerGroup().addTo(map); hqLayer = L.layerGroup().addTo(map);
+  map.on('popupopen', e => e.popup.getElement().querySelector('[data-tagreg]')?.addEventListener('click', ev => { ev.preventDefault(); const f = $('#tagform'); f.reg.value = ev.target.dataset.tagreg; f.ticker.focus(); map.closePopup(); }));
+}
+
+async function showJets() {
+  if (typeof L === 'undefined') { $('#jetside').innerHTML = '<div class="card"><div class="empty">The map could not load in this view.</div></div>'; return; }
+  if (!map) initMap();
+  map.invalidateSize();
+  if (!JETS) JETS = await fetch('data/jets.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  drawJets();
+}
+
+function drawJets() {
+  const d = JETS;
+  if (!d) { $('#jetside').innerHTML = '<div class="card"><div class="empty">No aircraft snapshot has been published yet.</div></div>'; return; }
+  jetLayer.clearLayers(); hqLayer.clearLayers();
+  const tags = fleet(), near = d.near || {}, nearHex = new Set(Object.values(near).flat().map(j => j.hex));
+  for (const [lat, lon, track, ground, reg, type, alt, gs, hex] of d.jets) {
+    const tagged = tags[reg], hot = tagged || nearHex.has(hex);
+    const pop = `<b>${esc(reg || hex)}</b> · ${esc(type)}<br>${ground ? 'On the ground' : `${(+alt || 0).toLocaleString()} ft · ${Math.round(+gs || 0)} kt`}${tagged ? `<br>Tagged to <b>${esc(tagged)}</b>` : ''}<br>${faa(String(reg))}${reg && !tagged ? ` &nbsp;<a href="#" data-tagreg="${esc(reg)}">Tag to a company</a>` : ''}`;
+    (hot ? L.marker([+lat, +lon], { icon: plane(track, tagged), zIndexOffset: 500 }) : L.circleMarker([+lat, +lon], { radius: 2.4, stroke: false, fillColor: '#9a9aa6', fillOpacity: 0.8 })).bindPopup(pop).addTo(jetLayer);
+  }
+  for (const [t, h] of Object.entries(d.hqs || {})) {
+    const n = (near[t] || []).length;
+    L.marker([+h.lat, +h.lon], { icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<span class="hq${n ? ' hot' : ''}">${esc(t)}${n ? `<b>${n}</b>` : ''}</span>` }) }).bindPopup(`<b>${esc(t)}</b> · ${esc(h.name)}<br>${esc(h.city)}<br>${n} business jet${n === 1 ? '' : 's'} on the ground within ${+d.radiusKm} km`).addTo(hqLayer);
+  }
+  const list = Object.entries(near).sort((a, b) => b[1].length - a[1].length), tagged = Object.entries(tags);
+  const visits = list.flatMap(([t, js]) => js.filter(j => tags[j.reg] && tags[j.reg] !== t).map(j => ({ ...j, hq: t, owner: tags[j.reg] })));
+  $('#jetside').innerHTML = `
+    <div class="card"><div class="kpis"><div><b>${d.jets.length.toLocaleString()}</b><span>business jets in the snapshot</span></div><div><b>${nearHex.size}</b><span>parked near tracked HQs</span></div><div><b>${tagged.length}</b><span>jets you've tagged</span></div></div>
+      <div class="sub">Snapshot taken ${esc(ago(+d.at))}${d.partial ? ' · partial sweep (the aircraft feed was rate-limiting)' : ''} · ${Object.keys(d.hqs || {}).length} headquarters on the map</div>
+      <div class="key" style="margin-top:10px"><span><i style="background:var(--accent)"></i>Tagged jet</span><span><i style="background:var(--earn)"></i>Parked near an HQ</span><span><i style="background:#9a9aa6"></i>Other jets</span></div></div>
+    <div class="card"><h3>Cross-company visits</h3>${visits.length ? visits.map(v => `<div class="jl"><span><b>${esc(v.reg)}</b> (${esc(v.owner)}) near <b class="t" data-open="${esc(v.hq)}" style="cursor:pointer">${esc(v.hq)}</b> HQ</span><small>${+v.km} km</small></div>`).join('') : `<div class="sub">When a jet you've tagged to one company is on the ground within ${+d.radiusKm} km of another tracked company's headquarters, it shows up here.</div>`}</div>
+    <div class="card"><h3>Parked near headquarters</h3>${list.length ? list.map(([t, js]) => `<div class="jl"><span><b class="t" data-open="${esc(t)}" style="cursor:pointer">${esc(t)}</b> <small>${esc(d.hqs?.[t]?.city || '')}</small><br><small>${js.slice(0, 6).map(j => esc(j.reg || j.hex) + ' ' + esc(j.type)).join(' · ')}${js.length > 6 ? ' …' : ''}</small></span><b>${js.length}</b></div>`).join('') : '<div class="sub">No large business jets were on the ground near tracked headquarters in this snapshot.</div>'}</div>
+    <div class="card"><h3>Tag a jet to a company</h3><form id="tagform"><input name="reg" placeholder="Tail, e.g. N123AB" required><input name="ticker" placeholder="Ticker" required><button>Tag</button></form>
+      ${tagged.map(([reg, t]) => `<div class="jl"><span><b>${esc(reg)}</b> → ${esc(t)}</span><button class="ghost" data-untag="${esc(reg)}">Remove</button></div>`).join('')}
+      <div class="note">This map is a snapshot, not a live feed: a web page cannot reach aircraft data itself, so positions are captured by Catalyst's back end and published here. Tags are saved in this browser. Click a jet, check its owner in the FAA registry, then tag it.</div></div>`;
 }
 
 // ---------- Wiring ----------
@@ -446,6 +602,8 @@ function show(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
   if (view === 'calendar') renderCalendar();
   if (view === 'options') renderOptions();
+  if (view === 'signals') renderSignals();
+  if (view === 'jets') showJets();
 }
 
 document.addEventListener('click', e => {
@@ -456,6 +614,8 @@ document.addEventListener('click', e => {
   if ((el = hit('#tabs [data-v]'))) return show(el.dataset.v);
   if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; S.sort = [k, S.sort[0] === k ? -S.sort[1] : k === 'ticker' || k === 'next' ? 1 : -1]; return renderTable(); }
   if ((el = hit('[data-screen]'))) { S.crit = { ...SCREENS[el.dataset.screen] }; store('crit', S.crit); renderCrit(); return renderTable(); }
+  if ((el = hit('[data-tape]'))) { S.tape = el.dataset.tape; return renderSignals(); }
+  if ((el = hit('[data-untag]'))) { const f = fleet(); delete f[el.dataset.untag]; store('fleet', f); return drawJets(); }
   if ((el = hit('[data-optsym]'))) return loadOptions(el.dataset.optsym);
   if ((el = hit('[data-exp]'))) return loadOptions(S.opt.symbol, el.dataset.exp);
   if ((el = hit('[data-open]')) && !hit('a')) return openDetail(el.dataset.open);
@@ -464,18 +624,22 @@ document.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id === 'search') { const t = $('#q').value.trim().toUpperCase(); if (/^[A-Z0-9.\-]{1,8}$/.test(t)) { openDetail(t); $('#q').value = ''; $('#q').blur(); } }
   if (e.target.id === 'optform') loadOptions(e.target.symbol.value);
+  if (e.target.id === 'tagform') { const reg = e.target.reg.value.trim().toUpperCase(), t = e.target.ticker.value.trim().toUpperCase(); if (/^[A-Z0-9-]{2,9}$/.test(reg) && /^[A-Z0-9.\-]{1,8}$/.test(t)) { const f = fleet(); f[reg] = t; store('fleet', f); drawJets(); } }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
 $('#reset').onclick = () => { S.crit = {}; store('crit', S.crit); renderCrit(); renderTable(); };
 $('#run').onclick = () => {
   const custom = $('#custom').value.toUpperCase().split(/[^A-Z0-9.\-]+/).filter(t => /^[A-Z0-9.\-]{1,8}$/.test(t));
   store('uni', $('#uni').value); store('custom', $('#custom').value);
-  S.runError = null;
-  run(custom.length ? custom : UNIVERSES[$('#uni').value] || []);
+  S.runError = S.scanInfo = null;
+  const name = $('#uni').value;
+  if (custom.length || !SCANS[name]) return run(custom.length ? custom : UNIVERSES[name] || []);
+  S.tickers = []; S.runError = 'Scanning every US-listed stock…'; renderTable();
+  scan(name).then(list => { S.runError = list.length ? null : 'No US stocks match this scan right now.'; return run(list); }, e => { S.runError = report(e); S.tickers = []; renderTable(); });
 };
 
-$('#uni').innerHTML = Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('');
-$('#uni').value = UNIVERSES[store('uni')] ? store('uni') : 'Starter mix';
+$('#uni').innerHTML = `<optgroup label="Lists">${Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup><optgroup label="Live scans of every US stock">${Object.keys(SCANS).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup>`;
+$('#uni').value = UNIVERSES[store('uni')] || SCANS[store('uni')] ? store('uni') : 'Starter mix';
 $('#custom').value = store('custom') || '';
 renderCrit(); renderTable();
 ready.then(m => { if (m) $('#run').click(); else { $('#banner').textContent = ERRORS.capability_disabled; $('#banner').classList.add('on'); } });

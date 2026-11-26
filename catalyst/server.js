@@ -20,7 +20,9 @@ const TAIL = /^[A-Z0-9][A-Z0-9-]{1,8}$/;
 
 const json = (res, code, body) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
 const fail = (status, message) => Object.assign(new Error(message), { status });
-const ticker = v => { const t = String(v || '').trim().toUpperCase().replace('.', '-'); if (!TICKER.test(t)) throw fail(400, 'Enter a valid ticker symbol'); return t; };
+// Foreign listings keep their exchange suffix (7203.T, SAP.DE, 0700.HK); US share classes use a dash (BRK-B).
+const FOREIGN = /\.(T|HK|L|DE|F|PA|AS|MI|MC|SW|ST|CO|OL|HE|BR|LS|VI|KS|KQ|TW|SS|SZ|SI|AX|NZ|NS|BO|TO)$/;
+const ticker = v => { let t = String(v || '').trim().toUpperCase(); if (!FOREIGN.test(t)) t = t.replace('.', '-'); if (!TICKER.test(t)) throw fail(400, 'Enter a valid ticker symbol'); return t; };
 const tail = v => { const t = String(v || '').trim().toUpperCase(); if (!TAIL.test(t)) throw fail(400, 'Enter a valid tail number'); return t; };
 
 function body(req) {

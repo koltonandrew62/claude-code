@@ -195,13 +195,14 @@ async function geocode(address, place) {
 }
 
 // Live ADS-B positions from adsb.lol (open data, readsb format).
+const ADSB_GAP = +process.env.CATALYST_ADSB_GAP || 2000; // ms between requests; raise it if the feed rate-limits
 const pickAircraft = d => (d.ac || []).filter(a => a.lat != null && a.lon != null).map(a => ({
   hex: a.hex, reg: a.r || '', type: a.t || '', flight: (a.flight || '').trim(), ground: a.alt_baro === 'ground',
   alt: a.alt_baro === 'ground' ? 0 : a.alt_baro ?? a.alt_geom ?? null, gs: a.gs ?? null, track: a.track ?? a.true_heading ?? null,
   lat: a.lat, lon: a.lon,
 }));
-const aircraftByType = type => get(`https://api.adsb.lol/v2/type/${type}`, { source: 'Aircraft', ttl: 3 * MIN, gap: 2000, pick: pickAircraft });
-const aircraftByReg = reg => get(`https://api.adsb.lol/v2/reg/${encodeURIComponent(reg)}`, { source: 'Aircraft', ttl: 3 * MIN, gap: 2000, pick: pickAircraft });
+const aircraftByType = type => get(`https://api.adsb.lol/v2/type/${type}`, { source: 'Aircraft', ttl: 3 * MIN, gap: ADSB_GAP, pick: pickAircraft });
+const aircraftByReg = reg => get(`https://api.adsb.lol/v2/reg/${encodeURIComponent(reg)}`, { source: 'Aircraft', ttl: 3 * MIN, gap: ADSB_GAP, pick: pickAircraft });
 
 // ---------- Sources that use a key you enter in Settings ----------
 

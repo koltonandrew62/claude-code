@@ -96,6 +96,14 @@ Other free market-data APIs worth knowing (not wired in): Polygon.io, Twelve Dat
 Prep, Tiingo, MarketData.app, Alpaca Market Data, FRED, openFDA, OpenSky Network. Links are on the
 API keys page.
 
+## Markets covered
+
+US-listed stocks and ETFs get everything. Asian and European companies are covered through their US
+listings (the `Asia (US-listed)` and `Europe (US-listed)` lists): SEC filings, US option chains and
+Robinhood only exist for those. In the PC version's Options tab you can also type a foreign-exchange
+symbol in Yahoo's format (`7203.T` Tokyo, `0700.HK` Hong Kong, `SAP.DE` Frankfurt, `MC.PA` Paris,
+`SHEL.L` London) for a price forecast; filings, FDA and option chains are not available for those.
+
 ## Jet tracker
 
 Corporate jets turning up next to another company's headquarters is a classic deal-talk tell. Aircraft
@@ -115,6 +123,33 @@ All free and keyless: SEC EDGAR (filings, financials, full-text search), Yahoo F
 Google News (headlines), ClinicalTrials.gov, openFDA, US Census and OpenStreetMap geocoders (headquarters
 locations), adsb.lol (aircraft positions). Responses are cached in `.cache/`. Dots in the top-right
 corner show which sources are responding.
+
+## Hosted edition (`web/`)
+
+A single page that runs as a Claude artifact — open a link, nothing to install. A hosted page cannot
+fetch outside data, so it gets its data two ways:
+
+- **Live, in the browser** — prices, fundamentals, earnings history and dates, SEC filing lists and full
+  option chains come from the viewer's Robinhood connector.
+- **Back-end snapshot** — `web/feed.js` runs the full engine in this repo for every ticker in
+  `web/universes.json` (news sentiment, SEC-based M&A signals, FDA trial catalysts) and sweeps the
+  aircraft feed, writing `web/dist/data/feed.json` and `jets.json`. Those are published beside the page.
+
+```bash
+node web/build.js
+```
+
+```bash
+node web/feed.js
+```
+
+The universe menu also offers **live scans of every US-listed stock** (unusual volume, breakouts, earnings this week,
+S&P 500, Nasdaq 100, Russell 2000…) through Robinhood's scanner; the top 100 matches are analyzed.
+Company logos are downloaded by the feed and shipped as data: URIs in `data/logos.json`.
+
+Then publish `web/dist`. News, FDA and jets are only as fresh as the last feed run; tickers outside
+`web/universes.json` get live data and forecasts but no news or FDA sections. `node web/feed.js
+--jets-only` re-sweeps aircraft only; set `CATALYST_ADSB_GAP=6000` if the aircraft feed rate-limits.
 
 ## Tests
 
