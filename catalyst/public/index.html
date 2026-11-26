@@ -120,6 +120,7 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:rgb
 .chain tr.spot td{text-align:center;background:var(--accent);color:#000;font-weight:650;padding:3px;font-size:12px}
 .prov{padding:14px 0;border-top:1px solid var(--line)}.prov:first-of-type{border-top:0}.prov h4{margin:0 0 3px;font-size:14px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}.prov h4 a{font-size:12px;font-weight:400;color:var(--accent);white-space:nowrap}.prov .rowi{display:flex;gap:8px;margin-top:8px;align-items:center}.prov input[type=text],.prov input[type=password]{flex:1;background:#000;border:1px solid var(--line);border-radius:9px;padding:8px 10px;outline:0;min-width:0}.prov .res{font-size:12px;margin-top:6px;min-height:16px}
 .links a{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.links a:first-child{border:0}.links a span{color:var(--ink3);font-size:12px;text-align:right}
+.ranks{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px}.ranks:empty{display:none}
 @media(max-width:1000px){.fac{grid-template-columns:1fr 90px}.fac .sub{display:none}header{flex-wrap:wrap;gap:10px;padding:10px 14px}#search{order:3;max-width:none;flex-basis:100%}#tabs{overflow-x:auto;max-width:100%}#sources span{display:none}main{padding:14px}#v-screener.on,#v-jets.on{grid-template-columns:1fr}#map{height:56vh}#jetside{max-height:none}.tiles{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.hero{grid-template-columns:1fr}.row{grid-template-columns:70px 56px 1fr}.row .tag{display:none}#drawer{padding:14px}}
 </style>
 </head>
@@ -145,6 +146,7 @@ tbody tr{cursor:pointer;transition:background .12s}tbody tr:hover{background:rgb
     <div class="panel">
       <div class="ph"><h2 id="count">Results</h2><button class="ghost" id="csv">Export CSV</button></div>
       <div id="bar"><i></i></div>
+      <div class="ranks" id="ranks"></div>
       <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
     </div>
   </section>
@@ -174,7 +176,7 @@ const CAT_COLOR = { 'M&A': 'var(--ma)', FDA: 'var(--fda)', Earnings: 'var(--earn
 const CAPS = { micro: [0, 3e8], small: [3e8, 2e9], mid: [2e9, 1e10], large: [1e10, 2e11], mega: [2e11, Infinity] };
 const SCREENS = { 'Takeover radar': { merger: 30 }, 'FDA catalysts': { fda: 45, bio: true }, 'Earnings soon': { earnDays: 14 }, 'Unusual activity': { event: 25 }, 'Bullish news': { sent: 30 } };
 
-const S = { tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -1], watch: new Set(store('watch') || []), saved: store('screens') || {}, universes: {}, view: 'screener', gen: 0, done: 0, tape: 'All' };
+const S = { rank: 'Top catalysts', tickers: [], res: {}, crit: store('crit') || {}, sort: ['overall', -1], watch: new Set(store('watch') || []), saved: store('screens') || {}, universes: {}, view: 'screener', gen: 0, done: 0, tape: 'All' };
 const ok = () => S.tickers.map(t => S.res[t]).filter(r => r && !r.error);
 
 // ---------- Screener ----------
@@ -226,11 +228,20 @@ $('#crit').addEventListener('input', e => {
 const scoreCell = (v, col, big) => (v == null ? '<td class="sc sub">—</td>' : `<td class="sc${big ? ' big' : ''}"><b>${v}</b><i style="--v:${v}%;--c:${col}"></i></td>`);
 const sentBar = v => `<span class="dv"><em style="width:${Math.abs(v) / 2}%;${v >= 0 ? 'left:50%' : `right:50%`};background:${v >= 0 ? 'var(--up)' : 'var(--down)'}"></em></span>`;
 
+// Rankings: one tap re-sorts the screen.
+const RANKS = {
+  'Top catalysts': [r => r.scores.overall, -1], 'Most bullish': [r => r.outlook?.score, -1], 'Most bearish': [r => r.outlook?.score, 1],
+  'Best earnings growth': [r => r.earnings.epsYoY, -1], 'Most bullish earnings': [r => (r.earnings.daysTo != null ? r.earnings.lean : null), -1],
+  'Best news': [r => r.scores.sentiment, -1], 'Worst news': [r => r.scores.sentiment, 1],
+  'Takeover signals': [r => r.scores.merger, -1], 'FDA catalysts': [r => r.scores.fda, -1], 'Unusual activity': [r => r.scores.event, -1],
+};
+
 function renderTable() {
-  const [key, dir] = S.sort, get = COLS.find(c => c[0] === key)[2];
+  const rank = RANKS[S.rank], [key, cdir] = S.sort, get = rank ? rank[0] : COLS.find(c => c[0] === key)[2], dir = rank ? rank[1] : cdir;
+  $('#ranks').innerHTML = ok().length ? Object.keys(RANKS).map(n => `<button class="chip${S.rank === n ? ' on' : ''}" data-rank="${esc(n)}">${esc(n)}</button>`).join('') : '';
   const rows = ok().filter(passes).sort((a, b) => { const x = get(a), y = get(b); return x == null ? 1 : y == null ? -1 : (x < y ? -1 : x > y ? 1 : 0) * dir; });
   const pending = S.tickers.filter(t => !S.res[t]).length, failed = S.tickers.filter(t => S.res[t]?.error).length;
-  $('#thead').innerHTML = '<tr><th></th>' + COLS.map(([k, n, , num]) => `<th data-sort="${k}" class="${num ? 'num ' : ''}${k === key ? 'on' : ''}">${n}${k === key ? (dir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('') + '<th>Top signal</th></tr>';
+  $('#thead').innerHTML = '<tr><th></th>' + COLS.map(([k, n, , num]) => `<th data-sort="${k}" class="${num ? 'num ' : ''}${!rank && k === key ? 'on' : ''}">${n}${!rank && k === key ? (cdir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('') + '<th>Top signal</th></tr>';
   $('#tbody').innerHTML = rows.map(r => {
     const p = r.price, s = r.scores, e = r.earnings;
     return `<tr data-open="${esc(r.ticker)}"><td><button class="star${S.watch.has(r.ticker) ? ' on' : ''}" data-star="${esc(r.ticker)}" title="Watchlist">★</button></td>
@@ -590,7 +601,8 @@ document.addEventListener('click', e => {
   if ((el = hit('[data-star]'))) { const k = el.dataset.star; S.watch.has(k) ? S.watch.delete(k) : S.watch.add(k); store('watch', [...S.watch]); document.querySelectorAll(`[data-star="${CSS.escape(k)}"]`).forEach(b => b.classList.toggle('on', S.watch.has(k))); if (S.crit.starred) renderTable(); return; }
   if (hit('[data-close]')) return closeDetail();
   if ((el = hit('#tabs [data-v]'))) return show(el.dataset.v);
-  if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; S.sort = [k, S.sort[0] === k ? -S.sort[1] : k === 'ticker' || k === 'next' ? 1 : -1]; return renderTable(); }
+  if ((el = hit('[data-rank]'))) { S.rank = el.dataset.rank; return renderTable(); }
+  if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; S.rank = null; S.sort = [k, S.sort[0] === k ? -S.sort[1] : k === 'ticker' || k === 'next' ? 1 : -1]; return renderTable(); }
   if ((el = hit('[data-screen]'))) { S.crit = { ...({ ...SCREENS, ...S.saved }[el.dataset.screen]) }; store('crit', S.crit); renderCrit(); return renderTable(); }
   if ((el = hit('[data-tape]'))) { S.tape = el.dataset.tape; return renderSignals(); }
   if ((el = hit('[data-untag]'))) return api('/api/fleet?reg=' + encodeURIComponent(el.dataset.untag), { method: 'DELETE' }).then(loadJets);

@@ -18,6 +18,7 @@
 @media(max-width:1000px){.leaders{grid-template-columns:1fr}}
 #filters summary{cursor:pointer;color:var(--ink2);font-size:12px;padding:6px 0 12px;list-style:none;display:flex;justify-content:space-between}#filters summary::after{content:'▾';color:var(--ink3)}#filters:not([open]) summary::after{content:'▸'}#filters summary::-webkit-details-marker{display:none}
 .tiles.t3{grid-template-columns:repeat(3,1fr)}@media(max-width:1000px){.tiles.t3{grid-template-columns:repeat(2,1fr)}}
+.help{margin:-6px 0 12px;font-size:12px;color:var(--ink2)}.help summary{cursor:pointer;color:var(--ink3);list-style:none}.help summary::before{content:'ⓘ  '}.help summary::-webkit-details-marker{display:none}.help p{margin:8px 0 0;max-width:780px;line-height:1.5}.help b{color:var(--ink)}
 #v-screener.on>*{min-width:0}.fcell{white-space:nowrap}
 .fcell b{font-weight:600}.fcell i{font-style:normal}.fcell .u{color:var(--up)}.fcell .d{color:var(--down)}
 .about{color:var(--ink2);font-size:13px;line-height:1.55}
@@ -54,6 +55,11 @@ tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
     </aside>
     <div class="panel">
       <div class="ph"><h2 id="count">Results</h2></div>
+      <details class="help"><summary>What do these numbers mean?</summary><div>
+        <p><b>Outlook</b> runs from −100 (bearish) to +100 (bullish). It blends a technical score, a fundamental score and a news score.</p>
+        <p><b>Catalyst</b> runs from 0 to 100 and shows how strongly big-event signals are firing. <b>M&amp;A</b>, <b>FDA</b>, <b>Earnings</b> and <b>Event</b> are the signals behind it.</p>
+        <p><b>News</b> is the tone of recent headlines, −100 to +100. <b>60 days</b> is the recent price trend.</p>
+        <p>Tap a ranking to re-sort, or any row for the full picture: price ranges with confidence levels, earnings, filings and option strikes. None of this is investment advice.</p></div></details>
       <div class="pulse" id="pulse"></div>
       <div class="leaders" id="leaders"></div>
       <div class="ranks" id="ranks"></div>
@@ -124,7 +130,7 @@ const SCANS = {
   'Mid caps (S&P 400) · unusual volume': { tune: [2, 1.5], filters: t => [inIndex('SP400'), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
   'Small caps (Russell 2000) · unusual volume': { tune: [3, 1.5], filters: t => [inIndex('Russell2000'), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
 };
-const NAMES = {};
+const NAMES = {}, WATCHLIST = '★ My watchlist';
 async function scan(name) {
   const sc = SCANS[name];
   let th = sc.tune[0], res = {};
@@ -721,13 +727,14 @@ $('#run').onclick = () => {
   store('uni', $('#uni').value); store('custom', $('#custom').value);
   S.runError = S.scanInfo = null;
   const name = $('#uni').value;
+  if (!custom.length && name === WATCHLIST) { S.tickers = []; if (!S.watch.size) S.runError = 'Your watchlist is empty. Tap the star next to any stock to add it.'; return run([...S.watch]); }
   if (custom.length || !SCANS[name]) return run(custom.length ? custom : UNIVERSES[name] || []);
   S.tickers = []; S.runError = 'Scanning every US-listed stock…'; renderTable();
   scan(name).then(list => { S.runError = list.length ? null : 'No US stocks match this scan right now.'; return run(list); }, e => { S.runError = report(e); S.tickers = []; renderTable(); });
 };
 
-$('#uni').innerHTML = `<optgroup label="Lists">${Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup><optgroup label="Live scans of every US stock">${Object.keys(SCANS).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup>`;
-$('#uni').value = UNIVERSES[store('uni')] || SCANS[store('uni')] ? store('uni') : 'Starter mix';
+$('#uni').innerHTML = `<optgroup label="Lists"><option>${WATCHLIST}</option>${Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup><optgroup label="Live scans of every US stock">${Object.keys(SCANS).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup>`;
+$('#uni').value = UNIVERSES[store('uni')] || SCANS[store('uni')] || store('uni') === WATCHLIST ? store('uni') : 'Starter mix';
 $('#custom').value = store('custom') || '';
 renderCrit(); renderTable();
 if (innerWidth <= 1000) $('#filters').open = false; // on a phone, results come before the long filter list
