@@ -7,7 +7,7 @@ const S = require('./signals');
 
 const memo = new Map();
 // "VERTEX PHARMACEUTICALS INC / MA" -> "Vertex Pharmaceuticals Inc"
-const pretty = n => { const s = String(n).replace(/\s*[\/\\].*$/, ''); return s === s.toUpperCase() ? s.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()) : s; };
+const pretty = n => { const s = String(n).replace(/\s*[\/\\].*$/, ''); return s === s.toUpperCase() ? s.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()).replace(/\b(Nv|Sa|Ag|Plc|Se|Ab|Asa|Adr|Ii|Iii)\b/g, m => m.toUpperCase()) : s; };
 const SKIP = /^(3|4|5|144|424B|S-8|FWP|CORRESP|UPLOAD|ARS|SC 13G|SCHEDULE 13G|13F|11-K|SD|PX14A6G|EFFECT|CERT|8-A)/;
 
 function analyze(ticker) {
