@@ -48,6 +48,7 @@ tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
     <aside class="panel">
       <div class="ph"><h2>Screen</h2><button class="ghost" id="reset">Reset</button></div>
       <label class="f">Universe<select id="uni"></select></label>
+      <div id="scanbox" hidden><label class="f">Index<select id="scanIdx"></select></label><label class="f">Ranked by<select id="scanBy"></select></label></div>
       <textarea id="custom" rows="2" placeholder="…or paste any US-listed tickers: AAPL, VRTX, QQQ"></textarea>
       <button class="primary" id="run">Run screen</button>
       <div class="chips" id="screens"></div>
@@ -107,7 +108,7 @@ const DAY = 864e5, iso = SIG.iso, daysBetween = SIG.daysBetween;
 const CATS = { merger: ['M&A', 'var(--ma)'], fda: ['FDA', 'var(--fda)'], earnings: ['Earnings', 'var(--earn)'], event: ['Event radar', 'var(--event)'] };
 const CAT_COLOR = { 'M&A': 'var(--ma)', FDA: 'var(--fda)', Earnings: 'var(--earn)', Event: 'var(--event)' };
 const CAPS = { micro: [0, 3e8], small: [3e8, 2e9], mid: [2e9, 1e10], large: [1e10, 2e11], mega: [2e11, Infinity] };
-const UNIVERSES = /*UNIVERSES*/;
+const UNIVERSES = /*UNIVERSES*/, ETFS = /*ETFS*/;
 // Live scans run on Robinhood's scanner, which searches every US-listed stock; the top results are then analyzed here.
 const AVG50 = 'closeAvg(candleCount=50, candlePeriod="1d", session="all")', RELVOL = 'dayVolume / volumeAvg(candleCount=30, candlePeriod="1d", session="all")';
 const gt = (expression, v, display_title) => ({ expression, predicate: 'PREDICATE_GREATER_THAN', values: [String(v)], display_title });
@@ -115,34 +116,53 @@ const yes = (expression, display_title) => ({ expression, predicate: '=', values
 const inIndex = code => ({ expression: 'symbol', predicate: 'PREDICATE_IN_LIST', values: [code] });
 const cap = v => gt('fundamental.marketCap', v, 'Market cap');
 const ymd = k => iso(Date.now() + k * 864e5).replace(/-/g, '');
-// The scanner returns at most 200 rows, so each scan has a threshold that is tightened until the whole match set fits.
-const SCANS = {
-  'All US stocks · unusual volume': { tune: [2.5, 1.5], filters: t => [cap(1e9), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
-  'All US stocks · breaking out': { tune: [1.2, 1.12], filters: t => [cap(1e9), gt(`tradeAllDay.price / ${AVG50}`, t, 'Price vs 50-day')], sort: 'Price vs 50-day' },
-  'All US stocks · beaten down': { tune: [1.25, 1.15], filters: t => [cap(1e9), gt(`${AVG50} / tradeAllDay.price`, t, '50-day vs price')], sort: '50-day vs price' },
-  'All US stocks · best earnings growth': { tune: [0.5, 2.5], filters: t => [cap(2e9), gt('fundamental.quarterlyEpsGrowth', t, 'EPS growth')], sort: 'EPS growth' },
-  'All US stocks · best revenue growth': { tune: [0.3, 2], filters: t => [cap(2e9), gt('fundamental.quarterlyRevenueGrowth', t, 'Revenue growth')], sort: 'Revenue growth' },
-  'All US stocks · earnings in 7 days': { tune: [2e9, 3], filters: t => [cap(t), yes(`fundamental.earningsYmd >= ${ymd(0)}`, 'From'), yes(`fundamental.earningsYmd <= ${ymd(7)}`, 'To')], sort: 'Market cap' },
-  'All US stocks · 100 largest': { tune: [1.2e11, 1.4], filters: t => [cap(t)], sort: 'Market cap' },
-  'S&P 500 · most active today': { tune: [1.2, 1.4], filters: t => [inIndex('SP500'), cap(1), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
-  'Nasdaq 100': { tune: [1, 0], filters: () => [inIndex('NDX'), cap(1)], sort: 'Market cap' },
-  'Dow 30': { tune: [1, 0], filters: () => [inIndex('DJI'), cap(1)], sort: 'Market cap' },
-  'Mid caps (S&P 400) · unusual volume': { tune: [2, 1.5], filters: t => [inIndex('SP400'), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
-  'Small caps (Russell 2000) · unusual volume': { tune: [3, 1.5], filters: t => [inIndex('Russell2000'), gt(RELVOL, t, 'Relative volume')], sort: 'Relative volume' },
+// Live scans: pick an index (or the whole market) and what to rank by. Each ranking is a scanner expression with a
+// permissive floor (used for an index small enough to list whole) and a threshold that is tightened until the match
+// set fits the scanner's 200-row limit, so the top results really are the top.
+const INDEXES = {
+  'All US stocks': null, 'S&P 500': 'SP500', 'S&P 100': 'SP100', 'Nasdaq 100': 'NDX', 'Dow 30': 'DJI', 'S&P 400 mid caps': 'SP400', 'S&P 600 small caps': 'SP600',
+  'Russell 1000': 'Russell1000', 'Russell 2000': 'Russell2000', 'Russell 3000': 'Russell3000', 'Russell Midcap': 'RussellMidcap', 'Russell Microcap': 'RussellMicrocap',
+  'Semiconductors (SOX)': 'SOX', 'Housing (HGX)': 'HGX', 'Oil services (OSX)': 'OSX', 'Utilities (UTY)': 'UTY', 'Gold & silver miners (XAU)': 'XAU',
 };
-const NAMES = {}, WATCHLIST = '★ My watchlist';
-async function scan(name) {
-  const sc = SCANS[name];
-  let th = sc.tune[0], res = {};
-  for (let i = 0; i < 4; i++) {
-    res = (await rh('preview_scan', { filters: sc.filters(th) }, 5 * 6e4)).result || {};
-    if (!(res.total_items > 200) || !sc.tune[1]) break;
-    th *= sc.tune[1];
+const RSI14 = 'rsi(candleCount=14, candlePeriod="1d", session="all")';
+// [result column, expression, permissive floor, starting threshold inside an index, tightening factor, starting threshold for the whole market]
+const METRICS = {
+  'Largest companies': ['Market cap', 'fundamental.marketCap', 1, 1e10, 1.8, 1.2e11],
+  'Unusual volume today': ['Relative volume', RELVOL, 0, 1.2, 1.5, 2.5],
+  'Breaking out above the 50-day average': ['Price vs 50-day', `tradeAllDay.price / ${AVG50}`, 0, 1.05, 1.05, 1.2],
+  'Beaten down below the 50-day average': ['50-day vs price', `${AVG50} / tradeAllDay.price`, 0, 1.05, 1.05, 1.25],
+  'Best earnings growth': ['EPS growth', 'fundamental.quarterlyEpsGrowth', -1e9, 0.2, 2, 0.5],
+  'Best revenue growth': ['Revenue growth', 'fundamental.quarterlyRevenueGrowth', -1e9, 0.1, 2, 0.3],
+  'Cheapest on earnings (low P/E)': ['Earnings yield', '1 / fundamental.peRatio', 0, 0.04, 1.3, 0.08],
+  'Highest dividend yield': ['Dividend yield', 'fundamental.forwardDividendYield', 0, 0.02, 1.4, 0.05],
+  'Most oversold (RSI)': ['Oversold score', `100 - ${RSI14}`, 0, 55, 1.08, 68],
+  'Most overbought (RSI)': ['RSI', RSI14, 0, 60, 1.06, 72],
+  'Reporting earnings within 7 days': null,
+};
+const NAMES = {}, WATCHLIST = '★ My watchlist', LIVE = 'Live scan of the market or an index';
+async function scan(idxName, byName) {
+  const code = INDEXES[idxName], m = METRICS[byName], whole = !code, member = whole ? [] : [inIndex(code)];
+  let steps, build, sortCol;
+  if (!m) { // earnings window, ranked by size
+    sortCol = 'Market cap';
+    steps = whole ? [2e9, 6e9, 2e10, 6e10] : [1, 5e9, 2e10];
+    build = t => [...member, cap(t), yes(`fundamental.earningsYmd >= ${ymd(0)}`, 'From'), yes(`fundamental.earningsYmd <= ${ymd(7)}`, 'To')];
+  } else {
+    const [col, expr, floor, start, f, wholeStart] = m, s0 = whole ? wholeStart : start;
+    sortCol = col;
+    steps = [...(whole ? [] : [floor]), s0, s0 * f, s0 * f * f, s0 * f ** 3];
+    // across the whole market, skip the smallest companies so a ranking is not swamped by thinly traded names
+    build = t => (col === 'Market cap' ? [...member, cap(t)] : [...member, ...(whole ? [cap(/growth|earnings|dividend/i.test(byName) ? 2e9 : 1e9)] : []), gt(expr, t, col)]);
+  }
+  let res = {};
+  for (const t of steps) {
+    res = (await rh('preview_scan', { filters: build(t) }, 5 * 6e4)).result || {};
+    if (!(res.total_items > 200)) break;
   }
   const rows = (res.results || []).filter(r => r.instrument_type === 'EQUITY' && /^[A-Z0-9.\-]{1,8}$/.test(String(r.ticker)));
-  rows.sort((a, b) => (num(b.columns?.[sc.sort]) ?? -Infinity) - (num(a.columns?.[sc.sort]) ?? -Infinity));
+  rows.sort((a, b) => (num(b.columns?.[sortCol]) ?? -Infinity) - (num(a.columns?.[sortCol]) ?? -Infinity));
   for (const r of rows) if (r.columns?.Name) NAMES[r.ticker] = String(r.columns.Name);
-  S.scanInfo = `${res.total_items > 200 ? 'more than 200' : rows.length} US stocks matched · analyzing the top ${Math.min(rows.length, 100)}`;
+  S.scanInfo = `${idxName} · ${byName.toLowerCase()} · ${res.total_items > 200 ? 'more than 200' : rows.length} matched, analyzing the top ${Math.min(rows.length, 100)}`;
   return rows.slice(0, 100).map(r => r.ticker);
 }
 const SCREENS = { 'Bullish only': { look: 'bull' }, 'Bearish only': { look: 'bear' }, 'Takeover radar': { merger: 30 }, 'FDA catalysts': { fda: 45 }, 'Earnings soon': { earnDays: 14 }, 'Bullish news': { sent: 30 }, 'Unusual activity': { event: 25 }, 'Forecast: up': { dir: 'up' }, 'Forecast: down': { dir: 'down' } };
@@ -201,7 +221,7 @@ async function rh(tool, input, stale = 5 * 6e4) { // one read from Robinhood, at
     catch (e) { if (!e?.retryable) throw e; await sleep((e.retryAfterMs || 1200) + Math.random() * 800); r = await mcp.callTool('Robinhood', tool, input, opt); }
     const p = r?.payload;
     if (!p || typeof p !== 'object' || !p.data) throw { code: 'tool_error', message: 'unexpected response' };
-    $('#banner').classList.remove('on'); live('ok', 'Live · Robinhood');
+    $('#banner').classList.remove('on'); if ($('#live').className !== 'ok') live('ok', 'Live · Robinhood');
     return p.data;
   } finally { active--; waiting.shift()?.(); }
 }
@@ -321,18 +341,20 @@ function assemble(ticker, bars, fund, quote, earningsData, filingData, analyst) 
 const yearAgo = () => iso(Date.now() - 365 * DAY);
 const extras = t => Promise.all([rh('get_earnings_results', { symbol: t }, 30 * 6e4).catch(() => null), rh('get_sec_filing_index', { symbol: t, since: yearAgo() }, 30 * 6e4).catch(() => null)]);
 
-async function run(list) {
+const refreshScreen = () => { if (S.tickers.length && !S.tickers.some(t => !S.res[t])) run(S.tickers, true); };
+
+async function run(list, force) {
   const gen = ++S.gen;
   await feedReady;
   S.tickers = [...new Set(list)].slice(0, 100);
   renderTable();
-  const need = S.tickers.filter(t => !S.res[t] || S.res[t].error || !S.res[t].full); // also finish anything an interrupted run left half-loaded
+  const need = force ? S.tickers.slice() : S.tickers.filter(t => !S.res[t] || S.res[t].error || !S.res[t].full); // also finish anything an interrupted run left half-loaded
   if (!need.length) return;
   try {
     const [bars, fund, quotes, analysts] = await Promise.all([fetchBars(need), fetchFund(need), fetchQuotes(need), fetchAnalysts(need).catch(() => ({}))]);
-    for (const t of need) S.res[t] = bars[t]?.length > 30 ? assemble(t, bars[t], fund[t], quotes[t], undefined, undefined, analysts[t]) : { error: 'No data for this symbol' };
+    for (const t of need) if (!(force && S.res[t]?.full)) S.res[t] = bars[t]?.length > 30 ? assemble(t, bars[t], fund[t], quotes[t], undefined, undefined, analysts[t]) : { error: 'No data for this symbol' };
     if (gen === S.gen) renderTable();
-    const queue = need.filter(t => !S.res[t].error);
+    const queue = need.filter(t => !S.res[t].error && bars[t]?.length > 30); // a refresh keeps the old row if new data is missing
     await Promise.all([1, 2, 3].map(async () => {
       while (queue.length && gen === S.gen) {
         const t = queue.shift(), [er, fl] = await extras(t);
@@ -340,6 +362,7 @@ async function run(list) {
         if (gen === S.gen) { renderTable(); if (S.view === 'calendar') renderCalendar(); if (S.view === 'signals') renderSignals(); }
       }
     }));
+    if (gen === S.gen) live('ok', 'Live · Robinhood · updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   } catch (e) { const msg = report(e); for (const t of need) if (!S.res[t]) S.res[t] = { error: msg }; S.runError = msg; renderTable(); }
 }
 
@@ -731,13 +754,21 @@ $('#run').onclick = () => {
   S.runError = S.scanInfo = null;
   const name = $('#uni').value;
   if (!custom.length && name === WATCHLIST) { S.tickers = []; if (!S.watch.size) S.runError = 'Your watchlist is empty. Tap the star next to any stock to add it.'; return run([...S.watch]); }
-  if (custom.length || !SCANS[name]) return run(custom.length ? custom : UNIVERSES[name] || []);
-  S.tickers = []; S.runError = 'Scanning every US-listed stock…'; renderTable();
-  scan(name).then(list => { S.runError = list.length ? null : 'No US stocks match this scan right now.'; return run(list); }, e => { S.runError = report(e); S.tickers = []; renderTable(); });
+  if (custom.length || name !== LIVE) return run(custom.length ? custom : UNIVERSES[name] || ETFS[name] || []);
+  store('scan', [$('#scanIdx').value, $('#scanBy').value]);
+  S.tickers = []; S.runError = `Scanning ${$('#scanIdx').value}…`; renderTable();
+  scan($('#scanIdx').value, $('#scanBy').value).then(list => { S.runError = list.length ? null : 'No US stocks match this scan right now.'; return run(list); }, e => { S.runError = report(e); S.tickers = []; renderTable(); });
 };
 
-$('#uni').innerHTML = `<optgroup label="Lists"><option>${WATCHLIST}</option>${Object.keys(UNIVERSES).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup><optgroup label="Live scans of every US stock">${Object.keys(SCANS).map(n => `<option>${esc(n)}</option>`).join('')}</optgroup>`;
-$('#uni').value = UNIVERSES[store('uni')] || SCANS[store('uni')] || store('uni') === WATCHLIST ? store('uni') : 'Starter mix';
+const opts = keys => keys.map(n => `<option>${esc(n)}</option>`).join('');
+$('#uni').innerHTML = `<optgroup label="Lists"><option>${WATCHLIST}</option>${opts(Object.keys(UNIVERSES))}</optgroup><optgroup label="ETFs">${opts(Object.keys(ETFS))}</optgroup><optgroup label="Live scans"><option>${LIVE}</option></optgroup>`;
+$('#uni').value = UNIVERSES[store('uni')] || ETFS[store('uni')] || [WATCHLIST, LIVE].includes(store('uni')) ? store('uni') : 'Starter mix';
+$('#scanIdx').innerHTML = opts(Object.keys(INDEXES)); $('#scanBy').innerHTML = opts(Object.keys(METRICS));
+const savedScan = store('scan') || [];
+if (savedScan[0] in INDEXES) $('#scanIdx').value = savedScan[0];
+if (savedScan[1] in METRICS) $('#scanBy').value = savedScan[1];
+const syncScanBox = () => { $('#scanbox').hidden = $('#uni').value !== LIVE; };
+$('#uni').addEventListener('change', syncScanBox); syncScanBox();
 $('#custom').value = store('custom') || '';
 renderCrit(); renderTable();
 if (innerWidth <= 1000) $('#filters').open = false; // on a phone, results come before the long filter list

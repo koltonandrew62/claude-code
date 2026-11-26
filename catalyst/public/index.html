@@ -281,6 +281,12 @@ async function run(list) {
   sources();
 }
 
+async function refreshScreen() { // reload every screened ticker in place, without blanking the table
+  if (S.refreshing || !S.tickers.length || S.tickers.some(t => !S.res[t])) return;
+  S.refreshing = true;
+  try { for (const t of S.tickers.slice()) { const old = S.res[t], r = await load(t); if (r.error && old && !old.error) S.res[t] = old; } } finally { S.refreshing = false; }
+  renderTable(); refreshViews(); sources();
+}
 function refreshViews() { if (S.view === 'calendar') renderCalendar(); if (S.view === 'signals') renderSignals(); }
 async function sources() {
   const st = await api('/api/status').catch(() => ({})), names = Object.keys(st), bad = names.filter(n => !st[n].ok);
@@ -290,7 +296,8 @@ async function sources() {
 // ---------- Charts ----------
 // Appearance: theme, accent colour and table density, remembered in this browser.
 const ACCENTS = { lime: 'Lime', blue: 'Blue', violet: 'Violet', orange: 'Orange', pink: 'Pink', mono: 'Black & white' };
-const UI = Object.assign({ theme: 'dark', accent: 'lime', density: 'comfortable' }, store('ui') || {});
+const UI = Object.assign({ theme: 'dark', accent: 'lime', density: 'comfortable', refresh: '5' }, store('ui') || {});
+let refreshTimer;
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 let mapLand, mapLines; // basemap layers, repainted when the theme changes
 function paintMap() {
@@ -303,12 +310,16 @@ function applyUI() {
   root.dataset.accent = ACCENTS[UI.accent] ? UI.accent : 'lime';
   root.dataset.density = UI.density === 'compact' ? 'compact' : 'comfortable';
   paintMap();
+  // Auto-refresh re-runs the current screen in place while this tab is visible.
+  clearInterval(refreshTimer);
+  if (UI.refresh !== 'off') refreshTimer = setInterval(() => { if (!document.hidden && typeof refreshScreen === 'function') refreshScreen(); }, (+UI.refresh || 5) * 6e4);
 }
 function appearancePanel() {
   const seg = (key, opts) => `<div class="seg">${opts.map(([v, t]) => `<button data-ui="${key}:${v}" class="${UI[key] === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
   $('#appearance').innerHTML = `<h4>Appearance</h4><label>Theme</label>${seg('theme', [['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match system']])}
     <label>Accent colour</label><div class="sw">${Object.keys(ACCENTS).map(a => `<button data-ui="accent:${a}" data-accent="${a}" class="${UI.accent === a ? 'on' : ''}" title="${ACCENTS[a]}" aria-label="${ACCENTS[a]}"></button>`).join('')}</div>
-    <label>Table density</label>${seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']])}`;
+    <label>Table density</label>${seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']])}
+    <label>Auto-refresh</label>${seg('refresh', [['off', 'Off'], ['5', 'Every 5 min'], ['15', 'Every 15 min']])}`;
 }
 (() => {
   const btn = Object.assign(document.createElement('button'), { className: 'ghost', id: 'uibtn', textContent: 'Appearance' });

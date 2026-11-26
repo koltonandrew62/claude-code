@@ -23,6 +23,7 @@ page = fill(page, '/*CSS*/', between(local, '<style>', '</style>'));
 page = fill(page, '/*SIGNALS*/', fs.readFileSync(path.join(root, 'lib/signals.js'), 'utf8'));
 page = fill(page, '/*SHARED*/', shared);
 page = fill(page, '/*UNIVERSES*/', JSON.stringify(require('./universes.json')));
+page = fill(page, '/*ETFS*/', JSON.stringify(require('./etfs.json')));
 if ((page.match(/<\/script>/g) || []).length !== 4) throw new Error('unexpected script terminator inside inlined code');
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist/index.html'), page);

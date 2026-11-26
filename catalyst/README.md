@@ -113,6 +113,19 @@ API keys page.
 The **Appearance** button (top right) switches between dark, light and match-system themes, six accent
 colours and comfortable or compact tables. The choice is saved in your browser.
 
+The same panel sets **auto-refresh** (off, every 5 or every 15 minutes): the current screen reloads in
+place while the tab is visible. In the hosted edition this refreshes the live Robinhood data; its news,
+FDA and jet snapshot only changes when `web/feed.js` is run and published again.
+
+## Index and ETF screens (hosted edition)
+
+Under **Universe → Live scans** pick an index (all US stocks, S&P 500/100/400/600, Nasdaq 100, Dow 30,
+Russell 1000/2000/3000/Midcap/Microcap, semiconductors, housing, oil services, utilities, gold miners)
+and a ranking (largest, unusual volume, breakouts, beaten down, earnings or revenue growth, low P/E,
+dividend yield, oversold, overbought, reporting within 7 days). The top 100 matches are analyzed.
+Seven ETF lists (broad market, sectors, themes, international, bonds, commodities and crypto, leveraged)
+sit under **Universe → ETFs**; they use live data only.
+
 ## Markets covered
 
 US-listed stocks and ETFs get everything. Asian and European companies are covered through their US
