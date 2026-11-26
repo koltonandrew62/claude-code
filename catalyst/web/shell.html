@@ -7,11 +7,11 @@
 <link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 /*CSS*/
-#banner{display:none;margin:0 0 16px;padding:12px 16px;border:1px solid var(--down);border-radius:12px;background:rgba(230,103,103,.1);color:var(--ink)}#banner.on{display:block}
+#banner{display:none;margin:0 0 16px;padding:12px 16px;border:1px solid var(--down);border-radius:12px;background:color-mix(in srgb,var(--down) 11%,transparent);color:var(--ink)}#banner.on{display:block}
 #live{margin-left:auto;color:var(--ink3);font-size:12px;display:flex;gap:8px;align-items:center}#live i{width:7px;height:7px;border-radius:50%;background:var(--ink3)}#live.ok i{background:var(--up)}#live.bad i{background:var(--down)}
 .ranks{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px}
 .leaders{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.leaders:empty{display:none}
-.lead{background:linear-gradient(180deg,#141418,#0c0c0f);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.lead{background:linear-gradient(180deg,var(--p3),var(--p1));border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
 .lead h4{margin:0 0 6px;font-size:10.5px;font-weight:500;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em}
 .lrow{display:grid;grid-template-columns:24px 56px 1fr auto;gap:10px;align-items:center;padding:5px 0;cursor:pointer;font-size:13px}.lrow:hover>b:first-of-type{color:var(--accent)}
 .lrow .av{width:24px;height:24px;border-radius:7px;font-size:10px}.lrow .av.logo{padding:3px}.lrow span{color:var(--ink3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lrow i.u{color:var(--up);font-style:normal}.lrow i.d{color:var(--down);font-style:normal}
@@ -23,11 +23,11 @@
 .fcell b{font-weight:600}.fcell i{font-style:normal}.fcell .u{color:var(--up)}.fcell .d{color:var(--down)}
 .about{color:var(--ink2);font-size:13px;line-height:1.55}
 .pulse{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}.pulse:empty{display:none}
-.pulse div{background:linear-gradient(180deg,#141418,#0c0c0f);border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-width:0}
+.pulse div{background:linear-gradient(180deg,var(--p3),var(--p1));border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-width:0}
 .pulse span{display:block;color:var(--ink3);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pulse b{display:block;font-size:19px;font-weight:650;letter-spacing:-.02em;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pulse em{font-style:normal;color:var(--ink2);font-size:12px;font-weight:400}
-.cow{display:flex;align-items:center;gap:10px}.av{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#000;font-style:normal}
-.av.logo{background:#fff;padding:4px;overflow:hidden}.av img{width:100%;height:100%;object-fit:contain;display:block}.av.lg{width:46px;height:46px;border-radius:12px;font-size:16px}.av.lg.logo{padding:6px}
+.cow{display:flex;align-items:center;gap:10px}.av{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#111;font-style:normal}
+.av.logo{background:#fff;padding:4px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}.av img{width:100%;height:100%;object-fit:contain;display:block}.av.lg{width:46px;height:46px;border-radius:12px;font-size:16px}.av.lg.logo{padding:6px}
 .pxc b{display:block;font-weight:600}.pxc span{font-size:12px}.spark{display:block;width:84px;height:26px;overflow:visible}
 tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
 .fresh{display:flex;gap:6px;font-size:12px;color:var(--ink3)}.fresh span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
@@ -36,7 +36,7 @@ tbody tr[data-open]:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
 </head>
 <body>
 <header>
-  <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="#2b2b33"/><circle cx="12" cy="12" r="6" stroke="#6c6c78"/><path d="M12 12 19.5 6" stroke="#c8ff3e" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#c8ff3e"/></svg>CATALYST</div>
+  <div class="brand"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10.5" stroke="var(--line2)"/><circle cx="12" cy="12" r="6" stroke="var(--ink3)"/><path d="M12 12 19.5 6" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="var(--accent)"/></svg>CATALYST</div>
   <form id="search"><input id="q" placeholder="Analyze any ticker…" autocomplete="off" spellcheck="false" aria-label="Analyze a ticker"></form>
   <nav id="tabs"><button data-v="screener" class="on">Screener</button><button data-v="options">Options</button><button data-v="calendar">Calendar</button><button data-v="signals">Signal tape</button><button data-v="jets">Jet tracker</button></nav>
   <div id="live"><i></i><span>Connecting…</span></div>
@@ -492,7 +492,7 @@ function renderDetail(r) {
   <div class="card hero">${ring(s.overall)}<div><div class="eyebrow">Catalyst score · led by ${esc(r.driver)}</div><ul class="thesis">${r.thesis.map(t => `<li><i style="background:${CAT_COLOR[t.cat]}"></i><span>${esc(t.text)}</span></li>`).join('') || '<li>No notable signals right now.</li>'}</ul></div></div>
   ${bottom ? `<div class="card about">${bottom}.</div>` : ''}
   <div class="tiles t3">${Object.keys(CATS).map(tile).join('')}<div class="tile"><span class="lab">News sentiment</span><b>${nw ? (nw.score > 0 ? '+' : '') + nw.score : '—'}</b><em>${nw ? esc(nw.label) + ' · ' + nw.count + ' headlines' : 'Not in the snapshot'}</em>${nw ? sentBar(nw.score) : '<div class="meter"></div>'}</div><div class="tile"><span class="lab">Price forecast</span><b>${fc ? Math.round(fc.pUp * 100) + '%' : '—'}</b><em>${fc ? (fc.verdict === 'No clear edge' ? 'No clear edge' : 'Leaning ' + fc.verdict.toLowerCase()) + ' · chance up' : 'Too little history'}</em>${fc ? sentBar(Math.round((fc.pUp - 0.5) * 200)) : ''}</div></div>
-  <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:rgba(255,255,255,.25);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
+  <div class="card"><h3>Price · 1 year <span class="key"><span><i style="background:var(--earn)"></i>Earnings</span><span><i style="background:var(--ma);border-radius:1px;transform:rotate(45deg)"></i>M&A filing</span><span><i style="background:var(--veil2);border-radius:2px"></i>Likely 30-day range</span></span></h3>${priceChart(r)}</div>
   ${outlookCard(r.outlook)}${rangesCard(r.ranges, p?.last, r.analyst?.target)}
   ${forecastCard(fc)}
   <div class="card"><h3>Key numbers</h3><div class="stats">${stat('Market cap', fMoney(f.mcap))}${stat('P/E ratio', f.pe != null ? f.pe.toFixed(1) : '—')}${stat('Price / book', f.pb != null ? f.pb.toFixed(1) : '—')}${stat('Dividend yield', f.yield != null ? f.yield.toFixed(2) + '%' : '—')}${stat('52-week high', f.hi52 != null ? '$' + f.hi52.toFixed(2) : '—')}${stat('52-week low', f.lo52 != null ? '$' + f.lo52.toFixed(2) : '—')}${stat('52-week range', p?.pos52 != null ? Math.round(p.pos52 * 100) + '% of the way up' : '—')}${stat('Volume vs normal', p?.volRatio ? p.volRatio.toFixed(2) + 'x' : '—')}${r.analyst ? stat('Analyst ratings', `${r.analyst.buy} buy · ${r.analyst.hold} hold · ${r.analyst.sell} sell`) + stat('Average price target', r.analyst.target ? '$' + money2(r.analyst.target) + ' <span class="sub">' + fPct(r.analyst.upside, 0) + '</span>' : '—') : ''}${r.fundx ? stat('Revenue growth', fPct(r.fundx.revGrowth)) + stat('Net cash', fMoney(r.fundx.netCash)) : ''}</div></div>
@@ -505,8 +505,8 @@ function renderDetail(r) {
     ${evi(r.fda.evidence.slice(1))}<div class="note">Approval odds are historical base rates by phase and disease area (BIO/QLS 2011–2020), adjusted for the sponsor's track record. They are a starting point, not a forecast of this specific drug.</div></div>` : ''}
   <div class="card"><h3><span><i class="dot" style="background:var(--event)"></i>Event radar</span><span class="tag">${esc(r.event.level)}</span></h3>${evi(r.event.evidence)}</div>
   ${nw ? `<div class="card"><h3>News sentiment <span class="tag">${esc(nw.label)}</span></h3>
-    <div class="stack"><i style="flex:${+nw.pos};background:var(--up)"></i><i style="flex:${+nw.neu};background:#3a3a44"></i><i style="flex:${+nw.neg};background:var(--down)"></i></div><div class="key"><span><i style="background:var(--up)"></i>${+nw.pos} positive</span><span><i style="background:#3a3a44"></i>${+nw.neu} neutral</span><span><i style="background:var(--down)"></i>${+nw.neg} negative</span>${nw.buzz ? `<span>News pace ${(+nw.buzz).toFixed(1)}x normal</span>` : ''}</div>
-    <div style="margin-top:12px">${nw.items.map(n => `<div class="nw"><i class="dot" style="background:${n.s > 0 ? 'var(--up)' : n.s < 0 ? 'var(--down)' : '#3a3a44'}"></i><div><a href="${href(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a><div class="m"><span>${esc(n.publisher)} · ${esc(ago(+n.time))}</span>${(n.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></div></div>`).join('')}</div></div>` : ''}
+    <div class="stack"><i style="flex:${+nw.pos};background:var(--up)"></i><i style="flex:${+nw.neu};background:var(--mute)"></i><i style="flex:${+nw.neg};background:var(--down)"></i></div><div class="key"><span><i style="background:var(--up)"></i>${+nw.pos} positive</span><span><i style="background:var(--mute)"></i>${+nw.neu} neutral</span><span><i style="background:var(--down)"></i>${+nw.neg} negative</span>${nw.buzz ? `<span>News pace ${(+nw.buzz).toFixed(1)}x normal</span>` : ''}</div>
+    <div style="margin-top:12px">${nw.items.map(n => `<div class="nw"><i class="dot" style="background:${n.s > 0 ? 'var(--up)' : n.s < 0 ? 'var(--down)' : 'var(--mute)'}"></i><div><a href="${href(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a><div class="m"><span>${esc(n.publisher)} · ${esc(ago(+n.time))}</span>${(n.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></div></div>`).join('')}</div></div>` : ''}
   ${r.about ? `<div class="card"><h3>About</h3><div class="about">${esc(r.about)}</div></div>` : ''}
   <div class="card"><h3>Recent SEC filings</h3>${r.filings.map(x => `<div class="fil"><span>${fDate(x.date, 1)}</span><a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.form)} ↗</a><span>${esc(x.desc)}</span></div>`).join('') || '<div class="empty">No filings found.</div>'}</div>
   <div class="note">Scores are rule-based signals built from market data, not investment advice. Prices, earnings and options are live from your Robinhood connection (updated ${ago(r.asOf)}). ${r.covered ? 'News, SEC-based M&A signals and FDA catalysts come from a snapshot taken ' + esc(ago(+FEED.at)) + '.' : 'This ticker is outside the news and FDA snapshot, so those sections are not shown.'}</div>`;
@@ -628,8 +628,9 @@ function initMap() {
   map.createPane('base').style.zIndex = 250;
   const base = L.canvas({ pane: 'base' });
   Promise.all(['countries-110m', 'states-10m'].map(f => fetch(`vendor/${f}.json`).then(r => r.json()))).then(([world, us]) => {
-    L.geoJSON(topojson.feature(world, world.objects.countries), { pane: 'base', renderer: base, interactive: false, style: { color: '#2e2e37', weight: 1, fillColor: '#0e0e12', fillOpacity: 1 } }).addTo(map);
-    L.geoJSON(topojson.mesh(us, us.objects.states, (a, b) => a !== b), { pane: 'base', renderer: base, interactive: false, style: { color: '#26262e', weight: 1, fill: false } }).addTo(map);
+    mapLand = L.geoJSON(topojson.feature(world, world.objects.countries), { pane: 'base', renderer: base, interactive: false }).addTo(map);
+    mapLines = L.geoJSON(topojson.mesh(us, us.objects.states, (a, b) => a !== b), { pane: 'base', renderer: base, interactive: false }).addTo(map);
+    paintMap();
   }).catch(() => {});
   jetLayer = L.layerGroup().addTo(map); hqLayer = L.layerGroup().addTo(map);
   map.on('popupopen', e => e.popup.getElement().querySelector('[data-tagreg]')?.addEventListener('click', ev => { ev.preventDefault(); const f = $('#tagform'); f.reg.value = ev.target.dataset.tagreg; f.ticker.focus(); map.closePopup(); }));

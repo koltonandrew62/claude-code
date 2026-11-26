@@ -108,6 +108,11 @@ Other free market-data APIs worth knowing (not wired in): Polygon.io, Twelve Dat
 Prep, Tiingo, MarketData.app, Alpaca Market Data, FRED, openFDA, OpenSky Network. Links are on the
 API keys page.
 
+## Appearance
+
+The **Appearance** button (top right) switches between dark, light and match-system themes, six accent
+colours and comfortable or compact tables. The choice is saved in your browser.
+
 ## Markets covered
 
 US-listed stocks and ETFs get everything. Asian and European companies are covered through their US
