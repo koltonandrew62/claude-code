@@ -126,6 +126,17 @@ dividend yield, oversold, overbought, reporting within 7 days). The top 100 matc
 Seven ETF lists (broad market, sectors, themes, international, bonds, commodities and crypto, leveraged)
 sit under **Universe → ETFs**; they use live data only.
 
+## Custom scans (hosted edition)
+
+**Universe → Custom scan** screens for anything: choose where to search (the whole US market or an
+index), stack "at least" / "at most" conditions over 24 fields (price, market cap, P/E, forward P/E,
+PEG, price/sales, price/book, dividend yield, EPS and revenue growth, gross / operating / net margin,
+return on equity, beta, insider and institutional ownership, RSI, relative volume, distance from the
+50- and 200-day averages, implied volatility, days until earnings), pick what to rank by, and save it
+under a name. A "Describe what you want" box lets Claude draft the conditions from plain English; the
+draft lands in the builder so you can check and edit it before running. The results header also has a
+find box and a Copy table button (CSV to the clipboard).
+
 ## Markets covered
 
 US-listed stocks and ETFs get everything. Asian and European companies are covered through their US
