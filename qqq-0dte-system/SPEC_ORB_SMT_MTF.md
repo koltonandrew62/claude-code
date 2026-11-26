@@ -3,15 +3,13 @@
 Two thinkorswim studies plus a Python reference backtest that implement **exactly** these rules.
 All times are US/Eastern. Charts must show the **extended-hours session** (needed for PMH/PML).
 Symbol: QQQ. Comparison symbol for SMT: SPY (an input).
+Indicators used: PMH/PML, VWAP, the 15-minute opening range, ATR and RSI only. **No EMA of any kind** (the user removed it).
 
 ## Shared definitions
 - **Day reset**: when GetYYYYMMDD() changes.
 - **PMH / PML**: QQQ high / low of bars starting 04:00..09:29. **SPY PMH / PML** the same for SPY.
 - **VWAP**: session VWAP from the 09:30 bar: cumulative sum((high+low+close)/3 × volume) / cumulative volume,
   reset at the 09:30 bar. Not defined before 09:30.
-- **EMA20D (20-day EMA)**: ExpAverage of daily closes, length 20, where today's daily close is the current price
-  (thinkorswim's `close(period = AggregationPeriod.DAY)` behaves this way). On an intraday bar it equals
-  `prevEMA + (2/21) × (close − prevEMA)`, where prevEMA is the 20-day EMA through yesterday's close.
 - **OR (15-minute opening range)**: ORH / ORL = high / low of the regular-session bars starting 09:30..09:44.
 - **ATR**: Wilder ATR(14) on the chart's own bars (extended-hours bars included, as thinkorswim computes it).
 - **RSI**: Wilder RSI(14) on the chart's own bars.
@@ -45,7 +43,7 @@ ATR15 = Wilder ATR(14) on 15-minute bars.
 - **Rebuilding 15-minute bars on a 5-minute chart**: a 15-minute bar is complete on the 5-minute bar whose start minute
   mod 15 == 10 (for example, the 09:40 bar completes 09:30..09:44). Its high/low = max/min of that bar and the 2 before it,
   its close = that bar's close. ATR15 is computed on these rebuilt bars. The SMT bias in the 5-minute study is evaluated on
-  the **rebuilt 15-minute bars** (QQQ and SPY), so it matches the 15-minute study bar for bar. PMH/PML, OR, VWAP and EMA20D
+  the **rebuilt 15-minute bars** (QQQ and SPY), so it matches the 15-minute study bar for bar. PMH/PML, OR and VWAP
   are the same values on either chart. ATR5 and RSI5 = Wilder(14) on the 5-minute bars.
 - **Armed** at the close of the 5-minute bar that completes the 15-minute REJECT bar. It stays armed for 60 minutes
   (12 five-minute bars); no new trigger after the 13:00 bar starts. One entry per day.
@@ -58,17 +56,16 @@ ATR15 = Wilder ATR(14) on 15-minute bars.
   a) high ≤ ORL + 0.25 × ATR5 (the bounce can't reclaim the broken OR low);
   b) (high − LL) ≤ 0.5 × (refExtreme − LL), and refExtreme − LL > 0 (retraces at most half the move);
   c) RSI5 < 50;
-  d) VWAP filter (input, default ON): high < VWAP;
-  e) 20-day EMA filter (input, default ON): close < EMA20D.
+  d) VWAP filter (input, default ON): high < VWAP.
 - When a weak bounce bar closes, set **trigger = its low − 0.01**, **stop = its high + 0.05**,
   **target = trigger − 2 × (stop − trigger)**. Draw them as lines and add the bubble "WEAK BOUNCE: PUT entry below <trigger>".
 - If a later bar is another bounce bar (before the trigger hits): if it's still weak, it replaces the setup (new trigger,
-  stop and target from that bar); if it isn't weak (fails a–e), the setup is **cancelled for the day**.
+  stop and target from that bar); if it isn't weak (fails a–d), the setup is **cancelled for the day**.
 - **Entry**: the first bar after the weak bounce bar whose low ≤ trigger -> BUY PUT. Fill price = min(open, trigger).
   Bubble: "BUY PUT @ <fill>  stop <stop>  target <target>".
 ### CALL: shallow pullback (mirror)
 - **Pullback bar** = close < open or low < prior low. **Weak** if: low ≥ ORH − 0.25 × ATR5; (HH − low) ≤ 0.5 × (HH − refExtreme)
-  with HH − refExtreme > 0; RSI5 > 50; VWAP filter: low > VWAP; EMA filter: close > EMA20D.
+  with HH − refExtreme > 0; RSI5 > 50; VWAP filter: low > VWAP.
 - trigger = high + 0.01, stop = low − 0.05, target = trigger + 2 × (trigger − stop). Entry when high ≥ trigger,
   fill = max(open, trigger).
 
@@ -77,9 +74,9 @@ ATR15 = Wilder ATR(14) on 15-minute bars.
   -> SELL bubble with the reason ("SELL: target", "SELL: stop", "SELL: time", "SELL: 15:50").
 
 ## 15-minute study output (for a 15-minute chart)
-Plots: PMH, PML, ORH, ORL, VWAP, EMA20D. Bubbles: "SMT BEAR/BULL" at the bias bar, "15m BREAK" at the break bar,
+Plots: PMH, PML, ORH, ORL, VWAP. Bubbles: "SMT BEAR/BULL" at the bias bar, "15m BREAK" at the break bar,
 "15m REJECT: watch 5m for weak bounce (PUT)" or "...pullback (CALL)" at the REJECT bar. Labels: bias, SPY sweep status,
-price vs VWAP and EMA20D, and a warning if the chart isn't on 15-minute bars or isn't showing extended hours.
+price vs VWAP, and a warning if the chart isn't on 15-minute bars or isn't showing extended hours.
 
 ## 5-minute study output (for a 5-minute chart)
 The same plots, plus trigger/stop/target lines while a setup is armed. Bubbles: "15m REJECT", "WEAK BOUNCE / PULLBACK",
@@ -96,4 +93,4 @@ Alerts: inputs to enable alerts on BUY and SELL.
 - Option: the ATM 0DTE contract (nearest $1 strike to the fill). Prices come from the same model and fills as smt_orb_backtest.py
   (real 1-minute prices on 2026-11-25; elsewhere Black-Scholes with IV = ratio × causal realized vol; half-spread max($0.01, 1%);
   $0.65 per contract per side). Report 1 contract and the $1,617 / 10% sizing rule; IV multiplier 0.8/1.0/1.25/1.5 and a 2x spread
-  stress test; filter variants (VWAP/EMA on/off). Report every trade and every day's state (why no trade).
+  stress test; filter variants (VWAP filter on/off). Report every trade and every day's state (why no trade).
