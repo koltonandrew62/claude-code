@@ -18,7 +18,7 @@ Never convert time zones in the studies, and never use the chart's display time 
    Post-market bars are ignored by every rule (they may only show the day's final lines).
 3. **No carry-over in plots**: until today's first pre-market bar has been seen, today's PMH/PML must not show yesterday's
    values. Draw PMH/PML/OR/VWAP lines only on bars of the day they belong to (NaN elsewhere), so no line runs from yesterday into
-   today, and add an input to show past days.
+   today. Past days are shown by default (input showPastDays, see rule 7).
 4. **VWAP resets at the regular-market open**: the cumulative sums start fresh on the 09:30 bar. Only 09:30..15:59 bars are
    included; VWAP is NaN (not plotted, not used) before 09:30 and after 15:59, so pre-market and post-market volume never
    enter it.
@@ -27,6 +27,11 @@ Never convert time zones in the studies, and never use the chart's display time 
    OR is the 09:30, 09:35 and 09:40 bars.
 6. If no pre-market bar exists today (extended hours off), PMH/PML stay NaN, no SMT is computed, and a warning label says
    "Turn on extended-hours trading session". Never fall back to yesterday's values.
+7. **Chart settings the studies must work on: 30D:5m (5-minute study) and 30D:15m (15-minute study), extended hours on.**
+   That's about 30 days × 192 five-minute bars (≈5,800 bars) or × 64 fifteen-minute bars. So: every day in the 30 days must
+   compute independently and correctly (the resets above), signals and bubbles must appear on every past day as well as today
+   (input showPastDays, default YES, controls past-day lines and bubbles), and no expensive per-bar fold loops over long
+   ranges; use recursive state (x[1]) instead. The first day on the chart may have partial warm-up for ATR/RSI; that's fine.
 The Python reference must implement the same resets and windows, and the reviewers must check them line by line.
 
 ## Shared definitions
